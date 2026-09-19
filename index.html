@@ -5,7 +5,7 @@
 .multiSearchHead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px}.multiSearchHead span{font-size:10px;color:var(--muted)}.multiSearchTools{display:flex;gap:8px;margin-bottom:8px}.multiSearchTools .btn{padding:7px 10px;font-size:10px}.multiVehicleList{display:grid;gap:6px}.multiVehicleItem{display:flex;gap:9px;align-items:flex-start;padding:9px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}.multiVehicleItem input{margin-top:3px;accent-color:#1769e0}.multiVehicleItem span{display:flex;flex-direction:column;gap:3px;min-width:0}.multiVehicleItem b{font-size:13px}.multiVehicleItem small{font-size:10px;color:var(--muted);white-space:normal}.batchResults{display:grid;gap:5px}.batchResult{display:flex;justify-content:space-between;gap:10px;padding:7px 9px;border-radius:8px;font-size:10px}.batchResult.ok{background:#dcfce7;color:#166534}.batchResult.err{background:#fee2e2;color:#991b1b}.batchResult span{font-weight:700;text-align:right}@media(max-width:520px){.gateSearchField textarea{min-height:130px;font-size:18px}.gateNotesField textarea{min-height:90px;font-size:15px}}.masterEditList{display:grid;gap:7px}.masterEditItem{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff}.masterEditInfo{display:flex;flex-direction:column;gap:3px;min-width:0}.masterEditInfo b{font-size:15px}.masterEditInfo strong{font-size:13px}.masterEditInfo small{font-size:10px;color:var(--muted);line-height:1.35}.masterEditBtn{flex:0 0 auto}@media(max-width:520px){.masterEditItem{align-items:flex-start}.masterEditBtn{padding:9px 10px}}.oeToolbar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}.oeToolbar .btn{padding:8px 9px;font-size:11px}.oeToolbar select,.oeToolbar input[type=color]{height:37px;border:1px solid var(--line);border-radius:9px;padding:0 6px;font-size:11px}.oeFormulaBar{display:flex;gap:6px;align-items:center;margin-bottom:9px}.oeFormulaBar b{font-size:11px;background:#eef2f7;border-radius:8px;padding:8px 10px;min-width:52px;text-align:center}.oeFormulaBar input{flex:1;height:38px;border:1px solid var(--line);border-radius:9px;padding:0 10px;font-family:monospace;font-size:13px}.oeGridWrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:12px;background:#fff}.oeGrid{border-collapse:collapse}.oeGrid th,.oeGrid td{border:1px solid var(--line);padding:0;min-width:86px}.oeGrid th{background:#f5f7fa;font-size:10px;color:var(--muted);height:28px;position:sticky;top:0;z-index:2;text-align:center}.oeGrid td.oeRowHead{background:#f5f7fa;font-size:10px;color:var(--muted);text-align:center;position:sticky;left:0;z-index:1;min-width:34px;width:34px}.oeGrid th.oeCorner{position:sticky;left:0;top:0;z-index:3;min-width:34px;width:34px}.oeGrid td input{width:100%;height:32px;border:none;padding:0 6px;font-size:12px;background:transparent;font-family:inherit;box-sizing:border-box}.oeGrid td input:focus{outline:2px solid #2563eb;position:relative;z-index:1}.oeGrid td.oeErr input{color:#b91c1c;font-weight:800}.oeGrid td.oeSel input{background:#dbeafe}.oeMiniChart{margin-top:8px}</style></head><body>
 <div id="introOverlay" style="position:fixed;inset:0;z-index:99999;background:#05070d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;text-align:center">
   <div style="position:relative;width:100%;max-width:360px">
-    <video id="introVideo" src="video/app.mp4" autoplay playsinline style="width:100%;max-height:65vh;border-radius:16px;box-shadow:0 15px 45px rgba(0,0,0,.55);background:#000;display:block"></video>
+    <video id="introVideo" src="video/app.mp4" autoplay muted playsinline webkit-playsinline preload="auto" style="width:100%;max-height:65vh;border-radius:16px;box-shadow:0 15px 45px rgba(0,0,0,.55);background:#000;display:block"></video>
     <button id="introUnmuteBtn" type="button" style="display:none;position:absolute;bottom:12px;right:12px;border:none;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-weight:900;font-size:13px;padding:9px 14px;cursor:pointer">🔊 AKTIFKAN SUARA</button>
   </div>
   <button id="introContinueBtn" type="button" disabled style="padding:14px 34px;border:none;border-radius:999px;background:#2563eb;color:#fff;font-weight:900;font-size:16px;letter-spacing:.3px;cursor:not-allowed;opacity:.4;transition:opacity .2s">LANJUTKAN ➜</button>
@@ -90,6 +90,42 @@ Sarah
 <div class="card"><div class="label">🎨 CONDITIONAL FORMATTING</div><div class="formgrid"><div class="field"><label>KOLOM</label><select id="oeCfCol"></select></div><div class="field"><label>OPERATOR</label><select id="oeCfOp"><option value="eq">Sama dengan</option><option value="contains">Mengandung</option><option value="gt">Lebih besar dari</option><option value="lt">Lebih kecil dari</option><option value="between">Di antara</option></select></div><div class="field"><label>NILAI</label><input id="oeCfVal1" placeholder="nilai / batas bawah"></div><div class="field"><label>NILAI 2 (untuk Di antara)</label><input id="oeCfVal2" placeholder="batas atas"></div><div class="field"><label>WARNA</label><input id="oeCfColor" type="color" value="#fff3cd"></div></div><div class="actions"><button id="oeCfAdd" class="btn blue" type="button">+ TAMBAH ATURAN</button></div><div id="oeCfList" class="empty">Belum ada aturan.</div></div>
 <div class="card"><div class="label">💬 OFFICE COMMAND (LOKAL, TANPA AI)</div><div class="hint">Perintah sederhana yang dikenali: <code>sum kolom D</code>, <code>jumlah kolom D</code>, <code>count VIP kolom E</code>, <code>rata rata kolom F</code>. Hasil ditulis sebagai formula ke sel kosong berikutnya di baris 1.</div><div class="actions" style="gap:8px"><input id="oeCmdInput" style="flex:1;height:41px;border:1px solid var(--line);border-radius:10px;padding:0 10px" placeholder="Contoh: sum kolom D"><button id="oeCmdBtn" class="btn green" type="button">▶ JALANKAN</button></div><div id="oeCmdResult" class="result"></div></div>
 </section>
+<script>
+/* VACS INTRO VIDEO FIX — isolated; does not touch API/Spreadsheet configuration */
+(function(){
+  const bootIntroVideo = () => {
+    const v = document.getElementById('introVideo');
+    if (!v) return;
+    v.muted = true;
+    v.defaultMuted = true;
+    v.playsInline = true;
+    v.setAttribute('muted','');
+    v.setAttribute('playsinline','');
+    v.setAttribute('webkit-playsinline','');
+    v.preload = 'auto';
+
+    const play = () => {
+      const p = v.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(err => console.warn('[VACS] Intro autoplay blocked:', err));
+      }
+    };
+
+    if (v.readyState >= 2) play();
+    else v.addEventListener('loadeddata', play, {once:true});
+
+    v.addEventListener('error', () => {
+      console.error('[VACS] Intro video failed:', v.currentSrc || v.src);
+    }, {once:true});
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootIntroVideo, {once:true});
+  } else {
+    bootIntroVideo();
+  }
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <script>
 const GAS_API_ENDPOINTS=[
