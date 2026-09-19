@@ -65,8 +65,22 @@ Sarah
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <script>
+// VACS FIX: DEVICE / OPERATOR is optional. Never throw 'device is not defined'.
+function device(){
+  try{
+    const saved=String(localStorage.getItem('vacsDeviceId')||'').trim();
+    if(saved) return saved;
+  }catch(e){}
+  const ua=String(navigator.userAgent||'').toLowerCase();
+  if(ua.includes('android')) return 'Android';
+  if(/iphone|ipad|ipod/.test(ua)) return 'iOS';
+  if(ua.includes('windows')) return 'Windows';
+  if(/macintosh|mac os/.test(ua)) return 'macOS';
+  return 'Web';
+}
+
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbyorJsBbXuMkjMmOnqFSnxdH4rk_JXQjzzsSwDyWwgeb1KH_Pd75wTEXSvLKSrDpbVURA/exec"
+  "https://script.google.com/macros/s/AKfycbzgWF3XNMOIsEJfquG02ByVmHbfdHXYw8un_6jw-kJ6wSUABxnvUYkHQ1jcW4eii3Jc9Q/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -532,7 +546,7 @@ $('generateReport')?.addEventListener('click',report);$('rPeriodType')?.addEvent
 $('exportReport')?.addEventListener('click',exportReport);
 $('printReport')?.addEventListener('click',printReport);
 }
-try{initTypes();if($('dashDate'))$('dashDate').value=localISO();if($('ccFrom'))$('ccFrom').value=localISO();if($('ccTo'))$('ccTo').value=localISO();if($('aFrom'))$('aFrom').value=localISO();if($('aUntil'))$('aUntil').value=localISO();if($('deviceId'))$('deviceId').value=localStorage.getItem('vacsDeviceId')||'';bind();gdrBind();gdrRestore();if($('rPeriodType'))$('rPeriodType').value='daily';gdrRender();if($('gdrBar'))$('gdrBar').style.display='none';loadGates();}catch(e){console.error('VACS UI initialization failed:',e);toast('❌ UI gagal diinisialisasi: '+e.message)}
+try{initTypes();if($('dashDate'))$('dashDate').value=localISO();if($('ccFrom'))$('ccFrom').value=localISO();if($('ccTo'))$('ccTo').value=localISO();if($('aFrom'))$('aFrom').value=localISO();if($('aUntil'))$('aUntil').value=localISO();if($('deviceId'))$('deviceId').value=localStorage.getItem('vacsDeviceId')||device();bind();gdrBind();gdrRestore();if($('rPeriodType'))$('rPeriodType').value='daily';gdrRender();if($('gdrBar'))$('gdrBar').style.display='none';loadGates();}catch(e){console.error('VACS UI initialization failed:',e);toast('❌ UI gagal diinisialisasi: '+e.message)}
 let __vacsReconnectBusy=false,__vacsReconnectDelay=15000;async function __vacsRecover(){if(__vacsReconnectBusy)return;__vacsReconnectBusy=true;try{const ok=await health();if(ok){__vacsReconnectDelay=15000;await syncMasterCache();await syncQueue();await dash();try{await commandCenter()}catch(e){}}else __vacsReconnectDelay=Math.min(__vacsReconnectDelay*2,120000)}finally{__vacsReconnectBusy=false;setTimeout(__vacsRecover,__vacsReconnectDelay)}}
 (async()=>{online(false);const master=await syncMasterCache();const ok=await health();if(ok||master){if(ok){await dash();try{await refreshAuth();await syncQueue()}catch(e){}}else{try{await syncQueue()}catch(e){}}}else{authCache=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');renderAuth()}setTimeout(__vacsRecover,__vacsReconnectDelay)})();
 window.addEventListener('online',()=>{__vacsReconnectDelay=15000;__vacsRecover()});
