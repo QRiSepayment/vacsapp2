@@ -66,7 +66,7 @@ Sarah
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <script>
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbzFsmcCHhXDE6o0G5C4xdo22xmlP5YFvfCcWmyQ0imiHSOockU1As6GS-YyuYYR3HY3cw/exec"
+  "https://script.google.com/macros/s/AKfycbzgWF3XNMOIsEJfquG02ByVmHbfdHXYw8un_6jw-kJ6wSUABxnvUYkHQ1jcW4eii3Jc9Q/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -90,7 +90,7 @@ async function api(p,timeout=12000,retries=1){
       try{const r=await apiOnce_(base,p,timeout);if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false){lastErr=Error(r.message||'Backend request failed');break}lastErr=Error('Invalid backend response')}catch(e){lastErr=e}
     }
     // JSONP can be blocked by a browser CSP/redirect path. Use a same-origin Apps Script HTML bridge as a second transport.
-    try{const r=await apiBridgeOnce_(base,p,Math.max(8000,Math.min(timeout,15000)));if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false)lastErr=Error(r.message||'Bridge request failed')}catch(e){lastErr=e}
+    try{const r=await apiBridgeOnce_(base,p,Math.max(12000,Math.min(timeout,30000)));if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false)lastErr=Error(r.message||'Bridge request failed')}catch(e){lastErr=e}
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
@@ -581,6 +581,8 @@ window.addEventListener('online',()=>{__vacsReconnectDelay=15000;__vacsRecover()
 (function(){
 const ROBOT_PROFILES={
   daily:{needsDate:false,needsType:true},
+  weekly:{needsDate:false,needsType:true},
+  monthly:{needsDate:false,needsType:true},
   current:{needsDate:false,needsType:false}
 };
 function robSteps(profile){
