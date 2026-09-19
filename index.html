@@ -6,7 +6,7 @@
 <div id="introOverlay" style="position:fixed;inset:0;z-index:99999;background:#05070d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px;text-align:center">
   <div style="position:relative;width:100%;max-width:360px">
     <video id="introVideo" src="video/app.mp4" autoplay muted playsinline webkit-playsinline preload="auto" style="width:100%;max-height:65vh;border-radius:16px;box-shadow:0 15px 45px rgba(0,0,0,.55);background:#000;display:block"></video>
-    <button id="introUnmuteBtn" type="button" style="display:none;position:absolute;bottom:12px;right:12px;border:none;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-weight:900;font-size:13px;padding:9px 14px;cursor:pointer">🔊 AKTIFKAN SUARA</button>
+    <button id="introUnmuteBtn" type="button" style="display:block;position:absolute;bottom:12px;right:12px;border:none;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-weight:900;font-size:13px;padding:9px 14px;cursor:pointer">🔊 AKTIFKAN SUARA</button>
   </div>
   <button id="introContinueBtn" type="button" disabled style="padding:14px 34px;border:none;border-radius:999px;background:#2563eb;color:#fff;font-weight:900;font-size:16px;letter-spacing:.3px;cursor:not-allowed;opacity:.4;transition:opacity .2s">LANJUTKAN ➜</button>
   <div id="introHint" style="color:#ff1a1a;font-size:20px;font-weight:900;text-shadow:0 0 8px rgba(255,26,26,.85),0 0 18px rgba(255,26,26,.6);animation:introPulse 1s ease-in-out infinite">Klik Aktifkan Suara dulu untuk bisa melanjutkan</div>
@@ -90,6 +90,35 @@ Sarah
 <div class="card"><div class="label">🎨 CONDITIONAL FORMATTING</div><div class="formgrid"><div class="field"><label>KOLOM</label><select id="oeCfCol"></select></div><div class="field"><label>OPERATOR</label><select id="oeCfOp"><option value="eq">Sama dengan</option><option value="contains">Mengandung</option><option value="gt">Lebih besar dari</option><option value="lt">Lebih kecil dari</option><option value="between">Di antara</option></select></div><div class="field"><label>NILAI</label><input id="oeCfVal1" placeholder="nilai / batas bawah"></div><div class="field"><label>NILAI 2 (untuk Di antara)</label><input id="oeCfVal2" placeholder="batas atas"></div><div class="field"><label>WARNA</label><input id="oeCfColor" type="color" value="#fff3cd"></div></div><div class="actions"><button id="oeCfAdd" class="btn blue" type="button">+ TAMBAH ATURAN</button></div><div id="oeCfList" class="empty">Belum ada aturan.</div></div>
 <div class="card"><div class="label">💬 OFFICE COMMAND (LOKAL, TANPA AI)</div><div class="hint">Perintah sederhana yang dikenali: <code>sum kolom D</code>, <code>jumlah kolom D</code>, <code>count VIP kolom E</code>, <code>rata rata kolom F</code>. Hasil ditulis sebagai formula ke sel kosong berikutnya di baris 1.</div><div class="actions" style="gap:8px"><input id="oeCmdInput" style="flex:1;height:41px;border:1px solid var(--line);border-radius:10px;padding:0 10px" placeholder="Contoh: sum kolom D"><button id="oeCmdBtn" class="btn green" type="button">▶ JALANKAN</button></div><div id="oeCmdResult" class="result"></div></div>
 </section>
+<script>
+/* VACS INTRO SOUND BUTTON — isolated */
+(function(){
+  const initSoundButton = () => {
+    const v = document.getElementById('introVideo');
+    const b = document.getElementById('introUnmuteBtn');
+    if (!v || !b) return;
+
+    b.style.display = 'block';
+    b.addEventListener('click', () => {
+      v.muted = false;
+      v.removeAttribute('muted');
+      const p = v.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(err => console.warn('[VACS] Sound playback blocked:', err));
+      }
+      b.textContent = '🔊 SUARA AKTIF';
+      b.disabled = true;
+      b.style.opacity = '.65';
+    }, {once:true});
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSoundButton, {once:true});
+  } else {
+    initSoundButton();
+  }
+})();
+</script>
 <script>
 /* VACS INTRO VIDEO FIX — isolated; does not touch API/Spreadsheet configuration */
 (function(){
