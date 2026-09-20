@@ -12,7 +12,7 @@
   <div id="introHint" style="color:#ff1a1a;font-size:20px;font-weight:900;text-shadow:0 0 8px rgba(255,26,26,.85),0 0 18px rgba(255,26,26,.6);animation:introPulse 1s ease-in-out infinite">Klik Aktifkan Suara dulu untuk bisa melanjutkan</div>
 </div>
 <style>@keyframes introPulse{0%,100%{opacity:1}50%{opacity:.55}}</style>
-<header><span id="status" class="status">● CONNECTING...</span><h1>VACS V9.9</h1><div class="sub">Vehicle Access Control System • Central Multi-Device</div><div class="credit">CREATED BY: Mbah Pri</div><div class="clear"></div></header>
+<header><button id="refreshAllBtn" type="button" style="float:right;margin:0 0 0 8px;padding:8px 14px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:900;cursor:pointer">🔄 REFRESH DATA SPREADSHEET</button><span id="status" class="status">● CONNECTING...</span><h1>VACS V10.0</h1><div class="sub">Vehicle Access Control System • Central Multi-Device</div><div class="credit">CREATED BY: Mbah Pri</div><div class="clear"></div></header>
 <main>
 <nav class="nav">
 <button class="tab active" data-tab="gate">🚪 GATE</button><button class="tab" data-tab="command">🛡 COMMAND CENTER</button><button class="tab" data-tab="access">👤 ACCESS PASS</button><button class="tab" data-tab="master">📥 MASTER</button><button class="tab" data-tab="current">🚗 CURRENTLY INSIDE</button><button class="tab" data-tab="exceptions">⚠ EXCEPTIONS</button><button class="tab" data-tab="audit">📋 AUDIT EVENT</button><button class="tab" data-tab="alerts">🔔 ALERTS</button><button class="tab" data-tab="backup">💾 BACKUP</button><button class="tab" data-tab="report">📊 REPORT</button><button class="tab" data-tab="robot">🤖 OFFICE ROBOT</button>
@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbw5uvsuws9auq8VKqYASqfXjQJ7BnKVMlopGBGOBAYhnAqYPFSmH5q31j4Fg0lXpPSs_A/exec"
+  "https://script.google.com/macros/s/AKfycbzjaf4lVs5IV-AIr4-m-RWxs44sHI1CopsqOS3he4biJooBk8LfuUG5sOSRVKH3R0FtuQ/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -814,5 +814,10 @@ function robInit(){
 }
 robInit();
 })();
+</script>
+<script>
+async function refreshAll(){const b=document.getElementById('refreshAllBtn');if(b)b.disabled=true;try{toast('⏳ Mengambil data terbaru dari Spreadsheet...');const steps=[syncMasterCache,refreshAuth,loadGates,dash,commandCenter,current,alerts,exceptions,audit,()=>lastReport?report():0];for(const f of steps){try{await f()}catch(e){console.warn(e)}}toast('✅ Semua data sudah sinkron dengan Spreadsheet')}catch(e){toast('❌ '+e.message)}finally{if(b)b.disabled=false}}
+document.getElementById('refreshAllBtn')?.addEventListener('click',refreshAll);
+document.getElementById('masterRefreshBtn')?.addEventListener('click',()=>{try{syncMasterCache()}catch(e){}});
 </script>
 </body></html>
