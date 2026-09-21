@@ -261,7 +261,7 @@ function mapHead(row){const m={};Object.keys(row).forEach(k=>m[k.toLowerCase().r
 function val(m,a){for(const n of a){const k=n.toLowerCase().replace(/[^a-z0-9]/g,'');if(m[k]!==undefined&&String(m[k]).trim()!=='')return m[k]}return ''}
 async function importM(){const f=$('fileInput').files[0];if(!f)return toast('Pilih Excel/CSV terlebih dahulu.');if(!window.XLSX)return toast('Library Excel belum siap. Refresh.');const b=$('importBtn');b.disabled=true;try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}),rows=raw.map(x=>{const m=mapHead(x);return{name:val(m,['nama','namapemilik','pemilik']),plate:val(m,['nomorkendaraan','nopolisi','nopol','nomorpolisi','plate','plat']),division:val(m,['bagian/divisi','bagian','divisi']),vehicleType:val(m,['jeniskendaraan','jeniskendaraan','jenis kendaraan','jenis','tipe']),accessType:val(m,['accesstype','access type','kategori akses','kategori']),model:val(m,['model']),color:val(m,['warnakendaraan','warna'])}}).filter(x=>x.plate);if(!rows.length)throw Error('Kolom Nomor Kendaraan tidak ditemukan.');let c=0,u=0;for(let i=0;i<rows.length;i+=25){const r=await call({action:'importVehicles',rows:JSON.stringify(rows.slice(i,i+25))},30000);c+=r.data.created;u+=r.data.updated;b.textContent=`IMPORT ${Math.min(i+25,rows.length)}/${rows.length}`}$('importResult').textContent=`✓ ${c} baru • ${u} diperbarui`;$('importResult').className='result show ok';dash()}catch(e){$('importResult').textContent='❌ '+e.message;$('importResult').className='result show err'}finally{b.disabled=false;b.textContent='📥 IMPORT / UPDATE MASTER'}}
 function template(){if(!window.XLSX)return toast('Library Excel belum siap.');const ws=XLSX.utils.aoa_to_sheet([['Nama','Nomor Kendaraan','Bagian/Divisi','Jenis Kendaraan','Model','Warna Kendaraan','Access Type']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'VEHICLES');XLSX.writeFile(wb,'VACS_VEHICLES_TEMPLATE.xlsx');toast('Template Excel dibuat.')}
-async function current(){try{const r=await call({action:'current'}),a=r.data||[];$('currentList').className=a.length?'tablewrap':'empty';$('currentList').innerHTML=a.length?`<table class="table"><tr><th>Nama</th><th>Nomor Kendaraan</th><th>Divisi</th><th>Access Type</th><th>Jam IN</th><th>Tanggal</th></tr>${a.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.plate)}</td><td>${esc(x.division)}</td><td>${esc(x.accessType||x.type||'')}</td><td>${esc(fmtTime(x.inTime))}</td><td>${esc(x.date)}</td></tr>`).join('')}</table>`:'Tidak ada kendaraan di dalam.'}catch(e){$('currentList').textContent='❌ '+e.message}}
+async function current(){try{const r=await call({action:'current'}),a=r.data||[];$('currentList').className=a.length?'tablewrap':'empty';$('currentList').innerHTML=a.length?`<table class="table"><tr><th>Nama</th><th>Nomor Kendaraan</th><th>Divisi</th><th>Access Type</th><th>Jam IN</th><th>Tanggal</th><th>Keterangan</th></tr>${a.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.plate)}</td><td>${esc(x.division)}</td><td>${esc(x.accessType||x.type||'')}</td><td>${esc(fmtTime(x.inTime))}</td><td>${esc(x.date)}</td><td>${esc(x.notes||'')}</td></tr>`).join('')}</table>`:'Tidak ada kendaraan di dalam.'}catch(e){$('currentList').textContent='❌ '+e.message}}
 async function audit(){try{const r=await call({action:'audit',q:$('auditSearch').value}),a=r.data.events||[];$('auditList').className=a.length?'tablewrap':'empty';$('auditList').innerHTML=a.length?`<table class="table"><tr><th>Timestamp</th><th>Created By</th><th>Action</th><th>Nomor Kendaraan</th><th>Nama</th><th>Result</th><th>Detail</th></tr>${a.map(x=>`<tr><td>${esc(fmtTime(x.timestamp))}</td><td>${esc(x.createdBy)}</td><td>${esc(x.action)}</td><td>${esc(x.plate)}</td><td>${esc(x.name)}</td><td>${esc(x.result)}</td><td>${esc(x.detail)}</td></tr>`).join('')}</table>`:'Tidak ada audit event.'}catch(e){$('auditList').textContent='❌ '+e.message}}
 async function backup(){const b=$('backupBtn');b.disabled=true;try{const r=await call({action:'backup'},30000);if(!r.ok)throw Error(r.message);$('backupResult').textContent=`✓ Backup dibuat: ${r.data.name}`;$('backupResult').className='result show ok'}catch(e){$('backupResult').textContent='❌ '+e.message;$('backupResult').className='result show err'}finally{b.disabled=false}}
 function hariTanggal(v){const s=String(v??'').trim();let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);if(!m)return s;const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]);const dt=new Date(Date.UTC(y,mo-1,d));const hari=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][dt.getUTCDay()];return `${hari}, ${String(d).padStart(2,'0')} ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][mo-1]} ${y}`}
@@ -287,7 +287,7 @@ async function saveMaster(){return saveM()}
 let selectedVehicles=[];
 function updateGateButtons(){const n=selectedVehicles.length;$('inBtn').disabled=$('outBtn').disabled=!n;$('inBtn').textContent=n?`✓ VEHICLE IN (${n})`:'✓ VEHICLE IN';$('outBtn').textContent=n?`↗ VEHICLE OUT (${n})`:'↗ VEHICLE OUT'}
 function showVehicle(v){selected=v;$('profile').classList.toggle('show',!!v);if(v){$('plate').textContent=v.plate;$('owner').textContent=v.name||'Nama belum diisi';$('meta').textContent=v.division||'Bagian/Divisi belum diisi';$('vehicle').textContent=[v.type,v.model,v.color].filter(Boolean).join(' • ')||'Profil belum lengkap'}updateGateButtons()}
-function renderVehicleResults(items,queries){const el=$('result');if(!items.length){showVehicle(null);el.innerHTML='🚫 KENDARAAN TIDAK TERDAFTAR';el.className='result show err';return}selectedVehicles=items.slice();selected=selectedVehicles[0]||null;showVehicle(selected);el.className='result show ok';el.innerHTML=`<div class="multiSearchHead"><b>✓ ${items.length} KENDARAAN DITEMUKAN</b><span>${queries.length} pencarian</span></div><div class="multiSearchTools"><button type="button" class="btn blue" id="selectAllVehicles">☑ SELECT ALL</button><button type="button" class="btn" id="clearVehicles">CLEAR</button></div><div class="multiVehicleList">${items.map((v,i)=>`<label class="multiVehicleItem"><input type="checkbox" class="vehicleCheck" data-index="${i}" checked><span><b>${esc(v.plate||'—')}</b><small>${esc(v.name||'Nama belum diisi')} • ${esc([v.type,v.model,v.color].filter(Boolean).join(' • ')||'Profil belum lengkap')}</small></span></label>`).join('')}</div>`;
+function renderVehicleResults(items,queries){const el=$('result');if(!items.length){showVehicle(null);el.innerHTML='🚫 KENDARAAN TIDAK TERDAFTAR';el.className='result show err';return}selectedVehicles=items.slice();selected=selectedVehicles[0]||null;showVehicle(selected);el.className='result show ok';el.innerHTML=`<div class="multiSearchHead"><b>✓ ${items.length} KENDARAAN DITEMUKAN</b><span>${queries.length} pencarian</span></div><div class="multiSearchTools"><button type="button" class="btn blue" id="selectAllVehicles">☑ SELECT ALL</button><button type="button" class="btn" id="clearVehicles">CLEAR</button></div><div class="multiVehicleList">${items.map((v,i)=>`<label class="multiVehicleItem"><input type="checkbox" class="vehicleCheck" data-index="${i}" checked><span><b>${i+1}. ${esc(v.plate||'—')}</b><small>${esc(v.name||'Nama belum diisi')} • ${esc([v.type,v.model,v.color].filter(Boolean).join(' • ')||'Profil belum lengkap')}</small></span></label>`).join('')}</div>`;
 el.querySelector('#selectAllVehicles')?.addEventListener('click',()=>{el.querySelectorAll('.vehicleCheck').forEach(c=>c.checked=true);syncVehicleSelection(items)});
 el.querySelector('#clearVehicles')?.addEventListener('click',()=>{el.querySelectorAll('.vehicleCheck').forEach(c=>c.checked=false);syncVehicleSelection(items)});
 el.querySelectorAll('.vehicleCheck').forEach(c=>c.addEventListener('change',()=>syncVehicleSelection(items)))}
@@ -402,7 +402,7 @@ async function syncQueue(){
     remaining?'warn':'ok');
   return allResults;
 }
-function renderCurrent(a){$('currentList').className=a.length?'tablewrap':'empty';$('currentList').innerHTML=a.length?'<table class="table"><tr><th>Nama</th><th>Plate</th><th>Divisi</th><th>IN</th><th>Tanggal</th></tr>'+a.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.plate)}</td><td>${esc(x.division)}</td><td>${esc(fmtTime(x.inTime))}</td><td>${esc(x.date)}</td></tr>`).join('')+'</table>':'Tidak ada kendaraan di dalam.'}
+function renderCurrent(a){$('currentList').className=a.length?'tablewrap':'empty';$('currentList').innerHTML=a.length?'<table class="table"><tr><th>Nama</th><th>Plate</th><th>Divisi</th><th>IN</th><th>Tanggal</th><th>Keterangan</th></tr>'+a.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.plate)}</td><td>${esc(x.division)}</td><td>${esc(fmtTime(x.inTime))}</td><td>${esc(x.date)}</td><td>${esc(x.notes||'')}</td></tr>`).join('')+'</table>':'Tidak ada kendaraan di dalam.'}
 async function exceptions(){try{const d=await call({action:'exceptions',q:$('exceptionSearch').value});const a=d.data?.events||[];$('exceptionList').className=a.length?'tablewrap':'empty';$('exceptionList').innerHTML=a.length?'<table class="table"><tr><th>Timestamp</th><th>Event</th><th>Person</th><th>Plate</th><th>Type</th><th>Gate</th><th>Reason</th><th>Device</th></tr>'+a.map(x=>`<tr><td>${esc(fmtTime(x.timestamp))}</td><td>${esc(x.eventId)}</td><td>${esc(x.personName)}</td><td>${esc(x.plate)}</td><td>${esc(x.type)}</td><td>${esc(x.gateName)}</td><td><span class="pill pred">${esc(x.reason)}</span></td><td>${esc(x.device)}</td></tr>`).join('')+'</table>':'Tidak ada denied event.'}catch(e){toast(e.message)}}
 async function alerts(){try{const d=await call({action:'alerts'}),a=d.data?.alerts||[];$('alertList').className=a.length?'tablewrap':'empty';$('alertList').innerHTML=a.length?'<table class="table"><tr><th>Alert</th><th>Type</th><th>Severity</th><th>Time</th><th>Person</th><th>Plate</th><th>Status</th><th>Action</th></tr>'+a.map(x=>`<tr><td>${esc(x.alertId)}</td><td>${esc(x.type)}</td><td>${esc(x.severity)}</td><td>${esc(fmtTime(x.timestamp))}</td><td>${esc(x.person)}</td><td>${esc(x.plate)}</td><td>${esc(x.status)}</td><td><button class="btn" onclick="ack('${esc(x.alertId)}')">ACK</button> <button class="btn" onclick="resolveA('${esc(x.alertId)}')">RESOLVE</button></td></tr>`).join('')+'</table>':'Tidak ada alert.'}catch(e){toast(e.message)}}
 async function ack(id){try{await call({action:'ackAlert',alertId:id});alerts();commandCenter()}catch(e){toast(e.message)}}
@@ -410,7 +410,7 @@ async function resolveA(id){try{await call({action:'resolveAlert',alertId:id});a
 async function exportReport(){if(!lastReport)return toast('Generate report dulu.');try{
   const clean=v=>String(v??'');
   const rows=lastReport.rows||[],s=lastReport.summary||{};
-  const head=['Nama','Nomor Kendaraan','Bagian/Divisi','Jenis Kendaraan','Access Type','Model','Warna Kendaraan','Jam Masuk','Tanggal IN','Jam Keluar','Tanggal OUT','Status','Keterangan'];
+  const head=['No','Nama','Nomor Kendaraan','Bagian/Divisi','Jenis Kendaraan','Access Type','Model','Warna Kendaraan','Jam Masuk','Tanggal IN','Jam Keluar','Tanggal OUT','Status','Keterangan'];
   const NAVY={fgColor:{rgb:'1B538B'}},LIGHT={fgColor:{rgb:'EAF1FB'}},GOLD={fgColor:{rgb:'F5A623'}};
   const thin={style:'thin',color:{rgb:'B9C4CE'}};const boxAll={top:thin,bottom:thin,left:thin,right:thin};
   const sTitle={font:{bold:true,sz:16,color:{rgb:'FFFFFF'}},fill:NAVY,alignment:{vertical:'center'}};
@@ -422,6 +422,7 @@ async function exportReport(){if(!lastReport)return toast('Generate report dulu.
   const sNumAlt={font:{sz:10},fill:LIGHT,border:boxAll,alignment:{horizontal:'right',vertical:'center'}};
   const sSection={font:{bold:true,sz:11,color:{rgb:'FFFFFF'}},fill:GOLD,border:boxAll};
   const sTotal={font:{bold:true,sz:10},fill:LIGHT,border:boxAll,alignment:{horizontal:'right'}};
+  const sNo={font:{sz:10,bold:true},border:boxAll,alignment:{horizontal:'center',vertical:'center'}},sNoAlt={font:{sz:10,bold:true},fill:LIGHT,border:boxAll,alignment:{horizontal:'center',vertical:'center'}},sTotalL={font:{bold:true,sz:10,color:{rgb:'1B538B'}},fill:LIGHT,border:boxAll,alignment:{horizontal:'left',vertical:'center'}};
   const cell=(v,st)=>({v:v==null?'':v,t:typeof v==='number'?'n':'s',s:st});
   const ws={},merges=[];let R=0;
   const put=(r,c,v,st)=>{ws[XLSX.utils.encode_cell({r,c})]=cell(v,st)};
@@ -433,17 +434,18 @@ async function exportReport(){if(!lastReport)return toast('Generate report dulu.
   rows.forEach((x,idx)=>{
     const st=idx%2?sCellAlt:sCell;
     const vals=[clean(x.name),clean(x.plate),clean(x.division),clean(x.vehicleType||''),clean(x.accessType||x.type),clean(x.model),clean(x.color),clean(x.inTime),hariTanggal(x.inDate||x.date),clean(x.outTime),x.outDate?hariTanggal(x.outDate):'—',clean(x.status),clean(x.notes)];
-    vals.forEach((v,c)=>put(R,c,v,st));
+    put(R,0,idx+1,idx%2?sNoAlt:sNo);vals.forEach((v,c)=>put(R,c+1,v,st));
     R++;
   });
   if(!rows.length){put(R,0,'Tidak ada data pada tanggal tersebut.',sCell);merges.push({s:{r:R,c:0},e:{r:R,c:head.length-1}});R++}
+  else{put(R,0,reportTotalText_(rows),sTotalL);for(let c=1;c<head.length;c++)put(R,c,'',sTotalL);merges.push({s:{r:R,c:0},e:{r:R,c:head.length-1}});R++}
   R++;
   put(R,0,'RINGKASAN KENDARAAN',sSection);merges.push({s:{r:R,c:0},e:{r:R,c:1}});R++;
   [['IN HARI/PERIODE',s.totalIn||0],['OUT HARI/PERIODE',s.totalOut||0],['STILL INSIDE',s.totalInside||0],['DARI HARI SEBELUMNYA',s.carryoverInside||0],['MOBIL IN',s.cars||0],['MOTOR IN',s.motorcycles||0]].forEach((x,idx)=>{put(R,0,x[0],idx%2?sCellAlt:sCell);put(R,1,x[1],idx%2?sNumAlt:sNum);R++});
   put(R,0,'KETERANGAN',sSection);merges.push({s:{r:R,c:0},e:{r:R,c:1}});R++;
   const carry=lastReport.carryoverRows||[];
   put(R,0,carry.length?'Kendaraan dari hari sebelumnya yang masih di dalam':'Tidak ada kendaraan dari hari sebelumnya yang masih di dalam',sCell);merges.push({s:{r:R,c:0},e:{r:R,c:1}});R++;
-  carry.forEach(x=>{put(R,0,clean(x.plate),sCell);put(R,1,clean((x.vehicleType||'')+' • '+(x.inDate||'')+' '+(x.inTime||'')),sCell);R++});
+  carry.forEach((x,ci)=>{put(R,0,(ci+1)+'. '+clean(x.plate),sCell);put(R,1,clean((x.vehicleType||'')+' • '+(x.inDate||'')+' '+(x.inTime||'')),sCell);R++});
   R++;
   put(R,0,'GRAFIK JAM MASUK / KELUAR • PERIODE AKTIF',sSection);merges.push({s:{r:R,c:0},e:{r:R,c:3}});R++;
   ['Jam','Masuk','Keluar','Total'].forEach((h,c)=>put(R,c,h,sHead));R++;
@@ -453,7 +455,7 @@ async function exportReport(){if(!lastReport)return toast('Generate report dulu.
   put(R,0,'TOTAL',sTotal);put(R,1,tIn,sTotal);put(R,2,tOut,sTotal);put(R,3,tIn+tOut,sTotal);R++;
   ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R,c:head.length-1}});
   ws['!merges']=merges;
-  ws['!cols']=[{wch:22},{wch:16},{wch:20},{wch:18},{wch:20},{wch:16},{wch:16},{wch:10},{wch:20},{wch:10},{wch:20},{wch:16},{wch:40}];
+  ws['!cols']=[{wch:6},{wch:22},{wch:16},{wch:20},{wch:18},{wch:20},{wch:16},{wch:16},{wch:10},{wch:20},{wch:10},{wch:20},{wch:16},{wch:44}];
   ws['!rows']=[{hpt:22}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'VACS REPORT');
   const fname='VACS_'+fileDateName(lastReport.reportLogDate||lastReport.reportDate)+'.xlsx';
@@ -491,7 +493,7 @@ async function svgToPng_(svgEl,scale){
   ctx.drawImage(img,0,0,cv.width,cv.height);
   return{dataUrl:cv.toDataURL('image/png',1.0),w,h};
 }
-async function printReport(){if(!lastReport)return toast('Generate report dulu.');try{const C=window.jspdf?.jsPDF;if(!C)throw Error('PDF library belum siap.');const doc=new C({orientation:'landscape',unit:'mm',format:'a4'});doc.setFontSize(14);doc.text('VACS — ACCESS REPORT',14,12);doc.setFontSize(8);doc.text(String(lastReport.rangeFrom||lastReport.reportDate||'')+' → '+String(lastReport.rangeTo||lastReport.reportLogDate||lastReport.reportDate||'')+' • TYPE: '+(lastReport.filterType||'ALL'),14,18);const rows=(lastReport.rows||[]).map(x=>[x.name,x.plate,x.division,x.vehicleType||'',x.accessType||x.type||'',x.model,x.color,x.inTime,hariTanggal(x.inDate||x.date),x.outTime,x.outDate?hariTanggal(x.outDate):'',x.status,x.notes]);const head=['Nama','Nomor Kendaraan','Bagian/Divisi','Jenis Kendaraan','Access Type','Model','Warna','IN','Tanggal IN','OUT','Tanggal OUT','Status','Keterangan'];doc.autoTable({startY:23,head:[head],body:rows,theme:'grid',styles:{fontSize:5.7,cellPadding:1.3,overflow:'linebreak',valign:'top'},headStyles:{fillColor:[27,83,139],textColor:255}});let y=doc.lastAutoTable.finalY+7;doc.setFontSize(9);doc.text('RINGKASAN KENDARAAN',14,y);y+=5;const ps=lastReport.summary||{};const pbody=[['IN HARI/PERIODE',String(ps.totalIn||0)],['OUT HARI/PERIODE',String(ps.totalOut||0)],['STILL INSIDE',String(ps.totalInside||0)],['DARI HARI SEBELUMNYA',String(ps.carryoverInside||0)],['MOBIL IN',String(ps.cars||0)],['MOTOR IN',String(ps.motorcycles||0)]];doc.autoTable({startY:y,head:[['Keterangan','Jumlah']],body:pbody,theme:'grid',styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[27,83,139],textColor:255}});y=doc.lastAutoTable.finalY+6;const carryPdf=lastReport.carryoverRows||[];doc.text('KENDARAAN DARI HARI SEBELUMNYA',14,y);y+=4;doc.autoTable({startY:y,head:[['Kendaraan','Jenis','Masuk']],body:carryPdf.length?carryPdf.map(x=>[x.plate||'',x.vehicleType||'',(x.inDate||'')+' '+(x.inTime||'')]):[['—','Tidak ada','']],theme:'grid',styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[27,83,139],textColor:255}});
+async function printReport(){if(!lastReport)return toast('Generate report dulu.');try{const C=window.jspdf?.jsPDF;if(!C)throw Error('PDF library belum siap.');const doc=new C({orientation:'landscape',unit:'mm',format:'a4'});doc.setFontSize(14);doc.text('VACS — ACCESS REPORT',14,12);doc.setFontSize(8);doc.text(String(lastReport.rangeFrom||lastReport.reportDate||'')+' → '+String(lastReport.rangeTo||lastReport.reportLogDate||lastReport.reportDate||'')+' • TYPE: '+(lastReport.filterType||'ALL'),14,18);const rows=(lastReport.rows||[]).map((x,i)=>[i+1,x.name,x.plate,x.division,x.vehicleType||'',x.accessType||x.type||'',x.model,x.color,x.inTime,hariTanggal(x.inDate||x.date),x.outTime,x.outDate?hariTanggal(x.outDate):'',x.status,x.notes]);const head=['No','Nama','Nomor Kendaraan','Bagian/Divisi','Jenis Kendaraan','Access Type','Model','Warna','IN','Tanggal IN','OUT','Tanggal OUT','Status','Keterangan'];doc.autoTable({startY:23,head:[head],body:rows,foot:rows.length?[[{content:reportTotalText_(lastReport.rows||[]),colSpan:14,styles:{halign:'left',fontStyle:'bold',fillColor:[234,241,251],textColor:[27,83,139]}}]]:undefined,showFoot:'lastPage',columnStyles:{0:{halign:'center',cellWidth:8,fontStyle:'bold'}},theme:'grid',styles:{fontSize:5.7,cellPadding:1.3,overflow:'linebreak',valign:'top'},headStyles:{fillColor:[27,83,139],textColor:255}});let y=doc.lastAutoTable.finalY+7;doc.setFontSize(9);doc.text('RINGKASAN KENDARAAN',14,y);y+=5;const ps=lastReport.summary||{};const pbody=[['IN HARI/PERIODE',String(ps.totalIn||0)],['OUT HARI/PERIODE',String(ps.totalOut||0)],['STILL INSIDE',String(ps.totalInside||0)],['DARI HARI SEBELUMNYA',String(ps.carryoverInside||0)],['MOBIL IN',String(ps.cars||0)],['MOTOR IN',String(ps.motorcycles||0)]];doc.autoTable({startY:y,head:[['Keterangan','Jumlah']],body:pbody,theme:'grid',styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[27,83,139],textColor:255}});y=doc.lastAutoTable.finalY+6;const carryPdf=lastReport.carryoverRows||[];doc.text('KENDARAAN DARI HARI SEBELUMNYA',14,y);y+=4;doc.autoTable({startY:y,head:[['Kendaraan','Jenis','Masuk']],body:carryPdf.length?carryPdf.map(x=>[x.plate||'',x.vehicleType||'',(x.inDate||'')+' '+(x.inTime||'')]):[['—','Tidak ada','']],theme:'grid',styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[27,83,139],textColor:255}});
   const svgEl=document.querySelector('#reportChart svg');
   if(svgEl){
     doc.addPage('a4','landscape');
@@ -748,9 +750,10 @@ function robRenderDailyResult(data,qc){
 }
 function robExportCurrentExcel(rows){
   if(!window.XLSX)return toast('Library Excel belum siap.');
-  const head=['Nama','Nomor Kendaraan','Divisi','Access Type','Jam IN','Tanggal'];
-  const data=[['VACS — CURRENTLY INSIDE'],['Dibuat',new Date().toLocaleString('id-ID')],[],head,...rows.map(x=>[x.name||'',x.plate||'',x.division||'',x.accessType||x.type||'',x.inTime||'',x.date||''])];
-  const ws=XLSX.utils.aoa_to_sheet(data);ws['!cols']=[{wch:24},{wch:18},{wch:22},{wch:20},{wch:12},{wch:14}];
+  const head=['No','Nama','Nomor Kendaraan','Divisi','Access Type','Jam IN','Tanggal','Keterangan'];
+  const carryN=rows.filter(x=>/Menginap/i.test(x.notes||'')).length;
+  const data=[['VACS — CURRENTLY INSIDE'],['Dibuat',new Date().toLocaleString('id-ID')],[],head,...rows.map((x,i)=>[i+1,x.name||'',x.plate||'',x.division||'',x.accessType||x.type||'',x.inTime||'',x.date||'',x.notes||'']),[],['TOTAL: '+rows.length+' KENDARAAN DI DALAM • '+carryN+' menginap dari hari sebelumnya • '+(rows.length-carryN)+' masuk hari ini']];
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!cols']=[{wch:6},{wch:24},{wch:18},{wch:22},{wch:20},{wch:12},{wch:14},{wch:46}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'CURRENTLY INSIDE');
   XLSX.writeFile(wb,'VACS_CURRENTLY_INSIDE_'+Date.now()+'.xlsx');
   toast('✅ Excel Currently Inside berhasil dibuat.');
@@ -838,5 +841,36 @@ robInit();
 async function refreshAll(){const b=document.getElementById('refreshAllBtn');if(b)b.disabled=true;try{toast('⏳ Mengambil data terbaru dari Spreadsheet...');const steps=[syncMasterCache,refreshAuth,loadGates,dash,commandCenter,current,alerts,exceptions,audit,()=>lastReport?report():0];for(const f of steps){try{await f()}catch(e){console.warn(e)}}toast('✅ Semua data sudah sinkron dengan Spreadsheet')}catch(e){toast('❌ '+e.message)}finally{if(b)b.disabled=false}}
 document.getElementById('refreshAllBtn')?.addEventListener('click',refreshAll);
 document.getElementById('masterRefreshBtn')?.addEventListener('click',()=>{try{syncMasterCache()}catch(e){}});
+</script>
+<script>
+function reportTotalText_(rows){const n=rows.length,out=rows.filter(x=>/OUT/i.test(x.status||'')&&!/INSIDE/i.test(x.status||'')).length,carry=rows.filter(x=>x.carryover).length;return 'TOTAL: '+n+' DATA • '+out+' SUDAH KELUAR • '+(n-out)+' MASIH DI DALAM'+(carry?' ('+carry+' menginap dari hari sebelumnya)':'')}
+(function(){
+const LBL={currentList:'KENDARAAN DI DALAM',reportTable:'DATA',auditList:'RIWAYAT',alertList:'ALERT',authTable:'OTORISASI',exceptionList:'EXCEPTION',gateStatus:'GATE'};
+function num(t){
+ if(t.dataset.nn)return;t.dataset.nn='1';
+ const rows=[...t.rows],hdr=rows.filter(r=>r.querySelector('th')),data=rows.filter(r=>!r.querySelector('th'));
+ if(!data.length||(data.length===1&&data[0].cells.length===1&&data[0].cells[0].colSpan>1))return;
+ const heads=hdr[0]?[...hdr[0].cells].map(c=>c.textContent.trim().toLowerCase()):[];
+ const st=heads.indexOf('status'),ket=heads.indexOf('keterangan'),sc=heads[heads.length-1]==='jumlah'?heads.length-1:-1;
+ let n=0,out=0,carry=0,sum=0;
+ data.forEach(r=>{
+  if(r.cells.length===1&&r.cells[0].colSpan>1){r.cells[0].colSpan++;return}
+  n++;
+  if(st>=0&&/OUT/i.test(r.cells[st]?.textContent||''))out++;
+  if(ket>=0&&/Menginap/i.test(r.cells[ket]?.textContent||''))carry++;
+  if(sc>=0)sum+=Number(r.cells[sc]?.textContent)||0;
+  const td=document.createElement('td');td.textContent=n;td.style.cssText='text-align:center;font-weight:900';r.insertBefore(td,r.firstChild)
+ });
+ hdr.forEach(r=>{const th=document.createElement('th');th.textContent='No';r.insertBefore(th,r.firstChild)});
+ const w=t.closest('[id]'),lb=(w&&LBL[w.id])||'DATA',cols=(hdr[0]||data[0]).cells.length;
+ let txt='TOTAL: '+n+' '+lb;
+ if(sc>=0)txt+=' • JUMLAH: '+sum;
+ else if(st>=0)txt+=' • '+out+' SUDAH KELUAR • '+(n-out)+' MASIH DI DALAM';
+ else if(ket>=0&&lb==='KENDARAAN DI DALAM')txt+=' • '+carry+' MENGINAP DARI HARI SEBELUMNYA • '+(n-carry)+' MASUK HARI INI';
+ const tr=t.insertRow(-1),td=tr.insertCell();td.colSpan=cols;td.style.cssText='font-weight:900;background:#eaf1fb;color:#1b538b';td.textContent=txt;
+}
+let q=0;const run=()=>{q=0;document.querySelectorAll('table.table:not([data-nn])').forEach(t=>{try{num(t)}catch(e){console.warn(e)}})};
+new MutationObserver(()=>{if(!q)q=requestAnimationFrame(run)}).observe(document.body,{childList:true,subtree:true});run();
+})();
 </script>
 </body></html>
