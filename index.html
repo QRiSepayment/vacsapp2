@@ -317,8 +317,8 @@ async function gateAccess(act){
         const sr=byId[r.eventId];if(!sr)return;
         if(sr.status==='SYNCED'){r.status='SYNCED';r.message=`${act} BERHASIL DISIMPAN KE SERVER`}
         else if(sr.status==='FAILED'){
-          if(sr.cleared){r.status='REJECTED';r.message='DITOLAK SERVER: '+(sr.message||'')}
-          else{r.status='QUEUED';r.message=`${act} TERSIMPAN \u2022 AKAN DICOBA LAGI OTOMATIS`}
+          if(sr.cleared){r.status='REJECTED';r.message='DITOLAK SERVER: '+(sr.message||'Alasan server tidak tersedia')}
+          else{r.status='REJECTED';r.message='GAGAL SERVER: '+(sr.message||'Alasan server tidak tersedia')}
         }
       });
     }else{
@@ -378,7 +378,7 @@ async function syncQueue(){
         if(r.status==='SYNCED'){clear.push(r.eventId);r.cleared=true}
         else if(r.status==='FAILED'){
           const item=batch.find(x=>x.eventId===r.eventId);
-          const msg=String(r.message||'');
+          const msg=String(r.message||'Alasan server tidak tersedia');
           if(/KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN|SUDAH DIPROSES|DUPLIKAT/i.test(msg)){
             clear.push(r.eventId);r.cleared=true;showConflict(item,msg)
           }else r.cleared=false;
