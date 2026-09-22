@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycby-yJiEtze-UIuY8ib0ERwCuiONhBhhBEgMZW5YYkodHObq9z82HON4MLbQ_hOV_05LCg/exec"
+  "https://script.google.com/macros/s/AKfycbxUux9mabgtTKz_xugSwP1cyunWdF0iGAat2N4LGRE9hCQukHaBzDYp3EFuuXB9z5xKRA/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -108,7 +108,14 @@ async function api(p,timeout=12000,retries=1){
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
-async function call(p,t=20000){return api(p,t,isOperaMini?2:1)}
+async function call(p,t=20000){
+  const a=String(p?.action||'');
+  const mutating=new Set(['syncQueue','access','accessAuth','registerVehicle','createAuthorization','updateAuthorizationStatus','deleteVehicle','deleteAccessLog','deleteAccessEventsRange','addGate','setAdminPin','ackAlert','resolveAlert','adminCleanupLongStay','importVehicles']);
+  // Never blindly retry a mutating request. The eventId/idempotency layer can
+  // recover an uncertain commit, but a transport retry only adds latency and
+  // can turn a lost ACK into a second state evaluation.
+  return api(p,t,mutating.has(a)?0:(isOperaMini?2:1));
+}
 function online(v){if(arguments.length){serverOnline=!!v;$('status').textContent=serverOnline?'● READY • SERVER ONLINE':'● READY • LOCAL MODE';$('status').classList.toggle('online',serverOnline);$('status').style.background=serverOnline?'#145b3b':'#8a4b00'}return serverOnline}
 async function health(){try{const r=await api({action:'health'},20000,1);if(!r.ok||!r.data||String(r.data.status||'').toUpperCase()!=='ONLINE')throw Error(r.message||'Backend tidak ONLINE');online(true);return true}catch(e){if(!serverOnline)online(false);return false}}
 function localISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -407,7 +414,7 @@ async function syncQueue(){
     try{
       // The server hot path is now lightweight. Keep a generous timeout because
       // Apps Script can still have cold-start/redirect latency on Android.
-      const d=await call({action:'syncQueue',events:JSON.stringify(batch)},30000);
+      const d=await call({action:'syncQueue',events:JSON.stringify(batch)},10000);
       if(d&&d.ok===false)throw Error(d.message||'Sync ditolak server');
       const rs=Array.isArray(d.data?.results)?d.data.results:[];
       await applyBatchResults(batch,rs);
@@ -417,7 +424,7 @@ async function syncQueue(){
       // false "TERSIMPAN (BELUM SYNC)" state seen by the user even when the
       // Spreadsheet had already received the transaction.
       try{
-        const vr=await call({action:'verifyEvents',eventIds:JSON.stringify(batch.map(x=>x.eventId))},12000,0);
+        const vr=await call({action:'verifyEvents',eventIds:JSON.stringify(batch.map(x=>x.eventId))},10000);
         if(vr&&vr.ok===true&&Array.isArray(vr.data?.results)){
           const verified=vr.data.results.filter(r=>r.status==='SYNCED'||(r.status==='FAILED'&&r.cleared));
           if(verified.length){
@@ -676,8 +683,70 @@ $('exportReport')?.addEventListener('click',exportReport);
 $('printReport')?.addEventListener('click',printReport);
 }
 try{initTypes();if($('dashDate'))$('dashDate').value=localISO();if($('ccFrom'))$('ccFrom').value=localISO();if($('ccTo'))$('ccTo').value=localISO();if($('aFrom'))$('aFrom').value=localISO();if($('aUntil'))$('aUntil').value=localISO();if($('deviceId'))$('deviceId').value=localStorage.getItem('vacsDeviceId')||device();bind();gdrBind();gdrRestore();if($('rPeriodType'))$('rPeriodType').value='daily';gdrRender();if($('gdrBar'))$('gdrBar').style.display='none';loadGates();}catch(e){console.error('VACS UI initialization failed:',e);toast('❌ UI gagal diinisialisasi: '+e.message)}
-let __vacsReconnectBusy=false,__vacsReconnectDelay=15000;async function __vacsRecover(){if(__vacsReconnectBusy)return;__vacsReconnectBusy=true;try{const ok=await health();if(ok){__vacsReconnectDelay=15000;await syncMasterCache();await syncQueue();await dash();try{await commandCenter()}catch(e){}}else __vacsReconnectDelay=Math.min(__vacsReconnectDelay*2,120000)}finally{__vacsReconnectBusy=false;setTimeout(__vacsRecover,__vacsReconnectDelay)}}
-(async()=>{online(false);const master=await syncMasterCache();const ok=await health();if(ok||master){if(ok){await dash();try{await refreshAuth();await syncQueue()}catch(e){}}else{try{await syncQueue()}catch(e){}}}else{authCache=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');renderAuth()}setTimeout(__vacsRecover,__vacsReconnectDelay)})();
+/* VACS FAST STARTUP / SWR
+   Jangan tahan UI sampai master/auth/dashboard selesai. Tampilkan cache lokal dulu,
+   lalu refresh server di background. Ini menghilangkan startup waterfall:
+   master -> health -> dashboard -> auth -> queue. */
+let __vacsReconnectBusy=false,__vacsReconnectDelay=30000;
+async function hydrateBackground_(opts={}){
+  const tasks=[];
+  if(opts.master!==false) tasks.push(syncMasterCache().catch(e=>console.debug('[VACS] background master refresh',e)));
+  if(opts.gates!==false) tasks.push(loadGates().catch(e=>console.debug('[VACS] background gates refresh',e)));
+  if(opts.auth!==false) tasks.push(refreshAuth().catch(e=>console.debug('[VACS] background auth refresh',e)));
+  if(opts.dashboard!==false) tasks.push(dash().catch(e=>console.debug('[VACS] background dashboard refresh',e)));
+  if(opts.queue!==false) tasks.push(syncQueue().catch(e=>console.debug('[VACS] background queue sync',e)));
+  await Promise.allSettled(tasks);
+}
+async function __vacsRecover(){
+  if(__vacsReconnectBusy)return;
+  __vacsReconnectBusy=true;
+  try{
+    const ok=await health();
+    if(ok){
+      __vacsReconnectDelay=30000;
+      // Refresh independently; one slow endpoint must not block the others.
+      await hydrateBackground_({master:true,gates:true,auth:true,dashboard:true,queue:true});
+    }else{
+      __vacsReconnectDelay=Math.min(__vacsReconnectDelay*2,120000);
+    }
+  }finally{
+    __vacsReconnectBusy=false;
+    setTimeout(__vacsRecover,__vacsReconnectDelay);
+  }
+}
+(async()=>{
+  // FIRST PAINT: local cache only. Never wait for a network call before the gate is usable.
+  online(false);
+  try{
+    const cached=await masterAll();
+    if(cached.length){
+      mergeAccessTypeOptions(cached.map(x=>x.accessType));
+      setMasterStatus(`• LOCAL CACHE ${cached.length} • MEMUAT SERVER...`,'warn');
+    }else{
+      const raw=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');
+      authCache=Array.isArray(raw)?raw:[];
+      renderAuth();
+      setMasterStatus('• LOCAL CACHE BELUM TERSEDIA • MEMUAT SERVER...','warn');
+    }
+  }catch(e){
+    authCache=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');
+    renderAuth();
+  }
+  // Network hydration is deliberately background and parallel.
+  setTimeout(()=>{
+    Promise.allSettled([
+      health(),
+      loadGates(),
+      refreshAuth(),
+      dash(),
+      syncQueue()
+    ]).then(()=>{
+      // Master is usually the largest payload; do it independently so it cannot delay first paint.
+      syncMasterCache().catch(e=>console.debug('[VACS] initial master refresh',e));
+    });
+  },0);
+  setTimeout(__vacsRecover,__vacsReconnectDelay);
+})();
 window.addEventListener('online',()=>{__vacsReconnectDelay=15000;__vacsRecover()});
 </script><script>
 /* ================= VACS OFFICE ROBOT — AUTOMATION ORCHESTRATOR (add-only) =================
@@ -879,7 +948,7 @@ robInit();
 })();
 </script>
 <script>
-async function refreshAll(){const b=document.getElementById('refreshAllBtn');if(b)b.disabled=true;try{toast('⏳ Mengambil data terbaru dari Spreadsheet...');const steps=[syncMasterCache,refreshAuth,loadGates,dash,commandCenter,current,alerts,exceptions,audit,()=>lastReport?report():0];for(const f of steps){try{await f()}catch(e){console.warn(e)}}toast('✅ Semua data sudah sinkron dengan Spreadsheet')}catch(e){toast('❌ '+e.message)}finally{if(b)b.disabled=false}}
+async function refreshAll(){const b=document.getElementById('refreshAllBtn');if(b)b.disabled=true;try{toast('⏳ Refresh data berjalan paralel...');const jobs=[syncMasterCache(),refreshAuth(),loadGates(),dash(),commandCenter(),current(),alerts(),exceptions(),audit()];await Promise.allSettled(jobs);if(lastReport)try{await report()}catch(e){console.warn(e)}toast('✅ Refresh data selesai')}catch(e){toast('❌ '+e.message)}finally{if(b)b.disabled=false}}
 document.getElementById('refreshAllBtn')?.addEventListener('click',refreshAll);
 document.getElementById('masterRefreshBtn')?.addEventListener('click',()=>{try{syncMasterCache()}catch(e){}});
 </script>
