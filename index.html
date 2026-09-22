@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbwMX8dJSc_iUg9qwMuTtg_1E_kQsFY19m-P-Kmoxq1Na4Dxn4edoUamKVgPT0ipN1k7/exec"
+  "https://script.google.com/macros/s/AKfycbwyF-etOFoje0EohXWkm-94Ftr5cJDtuUc8hv6wVZYj4dvF6Ftoq4Cc01ulUgCzmqfhsA/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -104,7 +104,7 @@ async function api(p,timeout=12000,retries=1){
       try{const r=await apiOnce_(base,p,timeout);if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false){lastErr=Error(r.message||'Backend request failed');break}lastErr=Error('Invalid backend response')}catch(e){lastErr=e}
     }
     // JSONP can be blocked by a browser CSP/redirect path. Use a same-origin Apps Script HTML bridge as a second transport.
-    try{const r=await apiBridgeOnce_(base,p,Math.max(12000,Math.min(timeout,30000)));if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false)lastErr=Error(r.message||'Bridge request failed')}catch(e){lastErr=e}
+    try{const r=await apiBridgeOnce_(base,p,Math.max(12000,Math.min(timeout,90000)));if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false)lastErr=Error(r.message||'Bridge request failed')}catch(e){lastErr=e}
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
@@ -593,7 +593,7 @@ function gdrMergeReportData(acc,data,iso,isFirst,isLast){
 }
 async function gdrFetchRangeReport(type){
   gdrEnsureValid();
-  const r=await call({action:'report',from:GDR.from,to:GDR.to,type},30000);
+  const r=await call({action:'report',from:GDR.from,to:GDR.to,type},90000);
   if(!r.ok)throw Error(r.message||'Report gagal untuk periode Global Date Range.');
   const data=r.data||{};
   data.filterType=type;
