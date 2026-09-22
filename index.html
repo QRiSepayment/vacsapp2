@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbwewzZ7EZ_91JTXIn21ux28Bg-V9ACiwOtTHYoHUM0nfdGVBYpJ7phlC_U_vKZPBGlM/exec"
+  "https://script.google.com/macros/s/AKfycbzs_eNgmIAAUeE-FPDQhujrCOkcL26t-MfbqJzH0MoJ8kT6O9B3Bi6YqpNJtKKiBGxTpw/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -378,33 +378,62 @@ async function syncQueue(){
   const BATCH_SIZE=5;
   const allResults=[];
   let transportFailed=false;
+
+  function applyBatchResults(batch,rs){
+    const returned=new Set(rs.map(r=>String(r.eventId||'')));
+    const clear=[];
+    rs.forEach(r=>{
+      if(r.status==='SYNCED'){clear.push(r.eventId);r.cleared=true}
+      else if(r.status==='FAILED'){
+        const item=batch.find(x=>x.eventId===r.eventId);
+        const msg=String(r.message||'');
+        if(r.cleared || /KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN|SUDAH DIPROSES|DUPLIKAT/i.test(msg)){
+          clear.push(r.eventId);r.cleared=true;
+          if(/KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN/i.test(msg))showConflict(item,msg);
+        }else r.cleared=false;
+      }
+    });
+    batch.forEach(item=>{
+      if(!returned.has(String(item.eventId))){
+        allResults.push({eventId:item.eventId,status:'FAILED',message:'Server tidak mengembalikan hasil transaksi ini.',cleared:false});
+      }
+    });
+    allResults.push(...rs);
+    return queueClear(clear);
+  }
+
   for(let i=0;i<items.length;i+=BATCH_SIZE){
     const batch=items.slice(i,i+BATCH_SIZE);
     try{
+      // The server hot path is now lightweight. Keep a generous timeout because
+      // Apps Script can still have cold-start/redirect latency on Android.
       const d=await call({action:'syncQueue',events:JSON.stringify(batch)},30000);
       if(d&&d.ok===false)throw Error(d.message||'Sync ditolak server');
       const rs=Array.isArray(d.data?.results)?d.data.results:[];
-      const returned=new Set(rs.map(r=>String(r.eventId||'')));
-      const clear=[];
-      rs.forEach(r=>{
-        if(r.status==='SYNCED'){clear.push(r.eventId);r.cleared=true}
-        else if(r.status==='FAILED'){
-          const item=batch.find(x=>x.eventId===r.eventId);
-          const msg=String(r.message||'');
-          if(/KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN|SUDAH DIPROSES|DUPLIKAT/i.test(msg)){
-            clear.push(r.eventId);r.cleared=true;showConflict(item,msg)
-          }else r.cleared=false;
-        }
-      });
-      await queueClear(clear);
-      batch.forEach(item=>{if(!returned.has(String(item.eventId)))allResults.push({eventId:item.eventId,status:'FAILED',message:'Server tidak mengembalikan hasil transaksi ini.',cleared:false})});
-      allResults.push(...rs);
+      await applyBatchResults(batch,rs);
     }catch(e){
+      // IMPORTANT: A transport timeout does NOT prove that the write failed.
+      // The old code immediately left everything in IDB, producing the exact
+      // false "TERSIMPAN (BELUM SYNC)" state seen by the user even when the
+      // Spreadsheet had already received the transaction.
+      try{
+        const vr=await call({action:'verifyEvents',eventIds:JSON.stringify(batch.map(x=>x.eventId))},12000,0);
+        if(vr&&vr.ok===true&&Array.isArray(vr.data?.results)){
+          const verified=vr.data.results.filter(r=>r.status==='SYNCED'||(r.status==='FAILED'&&r.cleared));
+          if(verified.length){
+            await applyBatchResults(batch,vr.data.results);
+            continue;
+          }
+        }
+      }catch(verifyErr){
+        console.debug('[VACS] verifyEvents failed',verifyErr);
+      }
       transportFailed=true;
       online(false);
       break;
     }
   }
+
   const synced=allResults.filter(x=>x.status==='SYNCED').length;
   const failed=allResults.filter(x=>x.status==='FAILED').length;
   const remaining=(await queueAll()).length;
