@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbxqAgL02Z_mBEqw1B6cUPK8wxDFE6DEOvWWm38COLDCBQV07Azaj14IZ_HVOaebA4zwPQ/exec"
+  "https://script.google.com/macros/s/AKfycbxqczZVc4alyQpa6On0GVCgtEfFrnr0pGLKig7-vQuO9-iemRz89BUi-Z61JO3btnuVGw/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -100,14 +100,13 @@ function validateApiResponse_(r){
   if(r&&r.ok===true)return r;
   throw Error(r?.message||'Backend request failed');
 }
-function readRace_(base,p,timeout){
-  return new Promise((resolve,reject)=>{
-    let pending=2,lastErr=null,done=false;
-    const finishOk=r=>{if(done)return;done=true;resolve(r)};
-    const finishErr=e=>{if(done)return;lastErr=e;pending--;if(pending<=0)reject(lastErr||Error('Gagal menghubungi Apps Script'))};
-    apiOnce_(base,p,timeout).then(validateApiResponse_).then(finishOk).catch(finishErr);
-    apiBridgeOnce_(base,p,Math.max(9000,Math.min(timeout+3000,15000))).then(validateApiResponse_).then(finishOk).catch(finishErr);
-  });
+async function readReliable_(base,p,timeout){
+  // V16: do NOT race two server executions. Racing JSONP + bridge doubles
+  // Apps Script load and can make Spreadsheet-backed reads slower.
+  // JSONP is primary; bridge is a true fallback only after JSONP fails.
+  try{return validateApiResponse_(await apiOnce_(base,p,timeout))}catch(e1){
+    return validateApiResponse_(await apiBridgeOnce_(base,p,Math.max(7000,Math.min(timeout+3000,12000))))
+  }
 }
 async function api(p,timeout=9000,retries=0){
   if(isOperaMini){timeout=Math.round(timeout*1.3)}
@@ -117,7 +116,7 @@ async function api(p,timeout=9000,retries=0){
     // READS: race JSONP against the Apps Script bridge. The first valid server
     // response wins, so Android is no longer forced to wait through a slow transport.
     if(!mutating){
-      try{const r=await readRace_(base,p,timeout);setApiBase(base);return r}catch(e){lastErr=e;continue}
+      try{const r=await readReliable_(base,p,timeout);setApiBase(base);return r}catch(e){lastErr=e;continue}
     }
     // WRITES: never race transports because that could execute a mutation twice.
     try{const r=await apiOnce_(base,p,timeout);const v=validateApiResponse_(r);setApiBase(base);return v}catch(e){lastErr=e}
@@ -131,18 +130,13 @@ function online(v,latencyMs){if(arguments.length){serverOnline=!!v;$('status').t
 async function health(){
   const t0=performance.now();
   try{
+    // Transport status is based on the lightweight ping only. A Spreadsheet
+    // health check must never make a healthy transport look offline/slow.
     const p=await api({action:'ping'},5000,0);
     if(!p.ok||!p.data||String(p.data.status||'').toUpperCase()!=='ONLINE')throw Error(p.message||'Server ping gagal');
     online(true,Math.round(performance.now()-t0));
-  }catch(e){online(false);return false}
-  try{
-    const r=await api({action:'health'},10000,0);
-    if(!r.ok||!r.data||String(r.data.status||'').toUpperCase()!=='ONLINE')throw Error(r.message||'Database backend tidak ONLINE');
-    online(true,Math.round(performance.now()-t0));
     return true;
-  }catch(e){
-    serverOnline=true;$('status').textContent='● SERVER ONLINE • DB CHECK FAILED';$('status').classList.add('online');$('status').style.background='#8a4b00';return false;
-  }
+  }catch(e){online(false);return false}
 }
 function localISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function makeEventId(){try{if(window.crypto?.randomUUID)return 'EVT-'+window.crypto.randomUUID()}catch(e){}return 'EVT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,10).toUpperCase()}
