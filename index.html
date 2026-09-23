@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbxUux9mabgtTKz_xugSwP1cyunWdF0iGAat2N4LGRE9hCQukHaBzDYp3EFuuXB9z5xKRA/exec"
+  "https://script.google.com/macros/s/AKfycbxekyyHGuNoUzWT040TOhsg_KS81SEOrpVnYkjNADwarznVN2F4yH7oMbJ8I20OZa4g7A/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -336,7 +336,7 @@ async function gateAccess(act){
         const sr=byId[r.eventId];if(!sr)return;
         if(sr.status==='SYNCED'){r.status='SYNCED';r.message=`${act} BERHASIL DISIMPAN KE SERVER`}
         else if(sr.status==='FAILED'){
-          if(sr.cleared){r.status='REJECTED';r.message='DITOLAK SERVER: '+(sr.message||'')}
+          if(sr.cleared){r.status='REJECTED';r.message='DITOLAK SERVER • TIDAK MASUK LOG: '+(sr.message||'')}
           else{r.status='QUEUED';r.message=`${act} TERSIMPAN \u2022 AKAN DICOBA LAGI OTOMATIS`}
         }
       });
