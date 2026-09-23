@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbxekyyHGuNoUzWT040TOhsg_KS81SEOrpVnYkjNADwarznVN2F4yH7oMbJ8I20OZa4g7A/exec"
+  "https://script.google.com/macros/s/AKfycby_CsycJfLE_VnqYiKkcAYSQ44Ygj9AXY3S-WU0TTa5jkRDBQW0V8l9rW9lM3eOa9Wk1g/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -394,9 +394,11 @@ async function syncQueue(){
       else if(r.status==='FAILED'){
         const item=batch.find(x=>x.eventId===r.eventId);
         const msg=String(r.message||'');
-        if(r.cleared || /KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN|SUDAH DIPROSES|DUPLIKAT/i.test(msg)){
+        const serverDenied=r.denied===true||r.cleared===true;
+        const legacyDenied=/KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN|SUDAH DIPROSES|DUPLIKAT/i.test(msg);
+        if(serverDenied || legacyDenied){
           clear.push(r.eventId);r.cleared=true;
-          if(/KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN/i.test(msg))showConflict(item,msg);
+          if(r.denied||legacyDenied)showConflict(item,msg);
         }else r.cleared=false;
       }
     });
