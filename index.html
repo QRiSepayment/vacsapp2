@@ -131,7 +131,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbxh-Iv7FJDYU39lI-hfwJ56Q9IyWrw_LHDg3NyU1MPnZjyhYPVww87QDgzk4Xb-YAM8Dw/exec"
+  "https://script.google.com/macros/s/AKfycbwiZrU6Tgruivduk7H9a3gEe-LY6pxc7wDTwS21SML34AFk32fcG8Eegu7MEbHOFCiOGg/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -159,9 +159,10 @@ async function api(p,timeout=12000,retries=1){
     // budget instead of silently adding another 12s iframe wait.
     const action=String(p&&p.action||'');
     const mutatingAction=new Set(['syncQueue','access','accessAuth','registerVehicle','createAuthorization','updateAuthorizationStatus','deleteVehicle','deleteAccessLog','deleteAccessEventsRange','addGate','setAdminPin','ackAlert','resolveAlert','adminCleanupLongStay','importVehicles','backup']).has(action);
-    const fastProbe=action==='ping';
+    const fastProbe=false;
     if(mutatingAction||fastProbe)continue;
-    try{const r=await apiBridgeOnce_(base,p,Math.max(12000,Math.min(timeout,90000)));if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false)lastErr=Error(r.message||'Bridge request failed')}catch(e){lastErr=e}
+    try{const bridgeTimeout=action==='ping'?Math.max(12000,timeout):Math.max(12000,Math.min(timeout,90000));
+      const r=await apiBridgeOnce_(base,p,bridgeTimeout);if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false)lastErr=Error(r.message||'Bridge request failed')}catch(e){lastErr=e}
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
@@ -696,11 +697,14 @@ async function printReport(){if(!lastReport)return toast('Generate report dulu.'
   const blob=doc.output('blob');downloadBlob(blob,'VACS_'+fileDateName(lastReport.reportLogDate||lastReport.reportDate)+'.pdf','application/pdf');toast('✅ PDF berhasil disiapkan.')}catch(e){toast('❌ PDF gagal: '+e.message)}}
 
 (function(){const ov=$('introOverlay'),btn=$('introContinueBtn'),vid=$('introVideo'),unmuteBtn=$('introUnmuteBtn'),hint=$('introHint');
-function enableContinue(){if(!btn)return;btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';if(hint){hint.textContent='Tekan tombol LANJUTKAN untuk masuk ke aplikasi';hint.style.animation='none'}}
-function enterApp(){if(!ov)return;try{vid&&vid.pause()}catch(e){}ov.style.display='none';try{ov.remove()}catch(e){}}
-if(vid){vid.muted=true;vid.play().catch(()=>{});vid.addEventListener('error',()=>{if(hint)hint.textContent='Video intro tidak tersedia — VACS tetap siap digunakan.';enableContinue()});vid.addEventListener('loadeddata',enableContinue);}
-// VIDEO GATE: selalu tampil saat halaman dibuka dan hanya ditutup oleh LANJUTKAN.
-setTimeout(enableContinue,800);
+let audioActivated=false;
+function lockContinue(){if(!btn)return;btn.disabled=true;btn.style.opacity='.45';btn.style.cursor='not-allowed';}
+function enableContinue(){if(!btn)return;if(!audioActivated){lockContinue();if(hint)hint.textContent='🔊 Tekan AKTIFKAN SUARA terlebih dahulu untuk melanjutkan.';return;}btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';if(hint){hint.textContent='✓ Suara aktif • Tekan LANJUTKAN untuk masuk ke aplikasi';hint.style.animation='none'}}
+function enterApp(){if(!audioActivated){if(hint)hint.textContent='⚠️ Aktifkan suara terlebih dahulu.';return;}if(!ov)return;try{vid&&vid.pause()}catch(e){}ov.style.display='none';try{ov.remove()}catch(e){}}
+function activateAudio(){if(!vid)return;audioActivated=true;vid.muted=false;vid.volume=1;try{const r=vid.play();if(r&&r.catch)r.catch(()=>{});}catch(e){}if(unmuteBtn)unmuteBtn.style.display='none';enableContinue();}
+if(vid){vid.muted=true;vid.play().catch(()=>{});vid.addEventListener('error',()=>{if(hint)hint.textContent='⚠️ Video intro gagal dimuat. Tetap wajib AKTIFKAN SUARA sebelum lanjut.';if(unmuteBtn)unmuteBtn.style.display='block';lockContinue()});vid.addEventListener('loadeddata',()=>{if(unmuteBtn)unmuteBtn.style.display='block';if(hint)hint.textContent='Video siap • wajib aktifkan suara sebelum masuk aplikasi';lockContinue();});}
+if(unmuteBtn)unmuteBtn.addEventListener('click',activateAudio);
+lockContinue();
 btn&&btn.addEventListener('click',enterApp);
 })();
 function setResult(id,msg,cls){const el=$(id);if(!el)return;el.textContent=msg;el.className='result show '+(cls||'ok')}
