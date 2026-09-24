@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbxqczZVc4alyQpa6On0GVCgtEfFrnr0pGLKig7-vQuO9-iemRz89BUi-Z61JO3btnuVGw/exec"
+  "https://script.google.com/macros/s/AKfycbxmbW4wcJ7zi2DlXLyDQc_PWLfzVIEbi4NIPmuJMzvL3pco0OHx78Xb1Hr66Nh-t-D7uQ/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -95,49 +95,32 @@ function apiOnce_(base,p,t){return new Promise((res,rej)=>{const cb='vacs_'+Date
 function apiBridgeOnce_(base,p,t){return new Promise((res,rej)=>{const id='vacs_bridge_'+Date.now()+'_'+Math.random().toString(36).slice(2),f=document.createElement('iframe');let done=0;const timer=setTimeout(()=>fin(rej,Error('Bridge timeout')),t);function fin(fn,v){if(done)return;done=1;clearTimeout(timer);window.removeEventListener('message',onmsg);try{f.remove()}catch(e){};fn(v)}function onmsg(ev){if(ev.source!==f.contentWindow)return;const d=ev.data||{};if(d.__vacsBridge!==id)return;if(d.ok===false)fin(rej,Error(d.message||'Bridge request failed'));else fin(res,d)}window.addEventListener('message',onmsg);f.style.display='none';f.src=base+'?'+new URLSearchParams({...p,bridge:'1',bridgeId:id,_t:Date.now()});document.body.appendChild(f)})}
 const isOperaMini=/Opera Mini/i.test(navigator.userAgent||'');
 function sleep_(ms){return new Promise(r=>setTimeout(r,ms))}
-const MUTATING_ACTIONS=new Set(['syncQueue','access','accessAuth','registerVehicle','createAuthorization','updateAuthorizationStatus','deleteVehicle','deleteAccessLog','deleteAccessEventsRange','addGate','setAdminPin','ackAlert','resolveAlert','adminCleanupLongStay','importVehicles']);
-function validateApiResponse_(r){
-  if(r&&r.ok===true)return r;
-  throw Error(r?.message||'Backend request failed');
-}
-async function readReliable_(base,p,timeout){
-  // V16: do NOT race two server executions. Racing JSONP + bridge doubles
-  // Apps Script load and can make Spreadsheet-backed reads slower.
-  // JSONP is primary; bridge is a true fallback only after JSONP fails.
-  try{return validateApiResponse_(await apiOnce_(base,p,timeout))}catch(e1){
-    return validateApiResponse_(await apiBridgeOnce_(base,p,Math.max(7000,Math.min(timeout+3000,12000))))
-  }
-}
-async function api(p,timeout=9000,retries=0){
-  if(isOperaMini){timeout=Math.round(timeout*1.3)}
+async function api(p,timeout=12000,retries=1){
+  if(isOperaMini){timeout=Math.round(timeout*1.6);retries=Math.max(retries,2)}
   const bases=apiBases();let lastErr=null;
   for(const base of bases){
-    const mutating=MUTATING_ACTIONS.has(String(p?.action||''));
-    // READS: race JSONP against the Apps Script bridge. The first valid server
-    // response wins, so Android is no longer forced to wait through a slow transport.
-    if(!mutating){
-      try{const r=await readReliable_(base,p,timeout);setApiBase(base);return r}catch(e){lastErr=e;continue}
+    for(let n=0;n<=retries;n++){
+      if(n>0){console.debug('[VACS] retry',n,'action=',p&&p.action,isOperaMini?'(Opera Mini)':'');await sleep_(300*n)}
+      try{const r=await apiOnce_(base,p,timeout);if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false){lastErr=Error(r.message||'Backend request failed');break}lastErr=Error('Invalid backend response')}catch(e){lastErr=e}
     }
-    // WRITES: never race transports because that could execute a mutation twice.
-    try{const r=await apiOnce_(base,p,timeout);const v=validateApiResponse_(r);setApiBase(base);return v}catch(e){lastErr=e}
-    try{const r=await apiBridgeOnce_(base,p,Math.max(10000,Math.min(timeout+4000,18000)));const v=validateApiResponse_(r);setApiBase(base);return v}catch(e){lastErr=e}
+    // IMPORTANT V21: mutating requests NEVER fall back to bridge after JSONP transport failure.
+    // A second transport is a second execution attempt and can create an ambiguous commit.
+    const mutatingAction=new Set(['syncQueue','access','accessAuth','registerVehicle','createAuthorization','updateAuthorizationStatus','deleteVehicle','deleteAccessLog','deleteAccessEventsRange','addGate','setAdminPin','ackAlert','resolveAlert','adminCleanupLongStay','importVehicles','backup']).has(String(p&&p.action||''));
+    if(mutatingAction)continue;
+    try{const r=await apiBridgeOnce_(base,p,Math.max(12000,Math.min(timeout,90000)));if(r&&r.ok===true){setApiBase(base);return r}if(r&&r.ok===false)lastErr=Error(r.message||'Bridge request failed')}catch(e){lastErr=e}
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
-async function call(p,t=9000){return api(p,t,0)}
-function serverConnecting(){serverOnline=false;$('status').textContent='● CONNECTING • SERVER...';$('status').classList.remove('online');$('status').style.background='#8a4b00'}
-function online(v,latencyMs){if(arguments.length){serverOnline=!!v;$('status').textContent=serverOnline?`● SERVER ONLINE • ${Number(latencyMs||0)}ms`:'● SERVER OFFLINE';$('status').classList.toggle('online',serverOnline);$('status').style.background=serverOnline?'#145b3b':'#8a4b00'}return serverOnline}
-async function health(){
-  const t0=performance.now();
-  try{
-    // Transport status is based on the lightweight ping only. A Spreadsheet
-    // health check must never make a healthy transport look offline/slow.
-    const p=await api({action:'ping'},5000,0);
-    if(!p.ok||!p.data||String(p.data.status||'').toUpperCase()!=='ONLINE')throw Error(p.message||'Server ping gagal');
-    online(true,Math.round(performance.now()-t0));
-    return true;
-  }catch(e){online(false);return false}
+async function call(p,t=20000){
+  const a=String(p?.action||'');
+  const mutating=new Set(['syncQueue','access','accessAuth','registerVehicle','createAuthorization','updateAuthorizationStatus','deleteVehicle','deleteAccessLog','deleteAccessEventsRange','addGate','setAdminPin','ackAlert','resolveAlert','adminCleanupLongStay','importVehicles','backup']);
+  // Never blindly retry a mutating request. The eventId/idempotency layer can
+  // recover an uncertain commit, but a transport retry only adds latency and
+  // can turn a lost ACK into a second state evaluation.
+  return api(p,t,mutating.has(a)?0:(isOperaMini?2:1));
 }
+function online(v){if(arguments.length){serverOnline=!!v;$('status').textContent=serverOnline?'● READY • SERVER ONLINE':'● READY • LOCAL MODE';$('status').classList.toggle('online',serverOnline);$('status').style.background=serverOnline?'#145b3b':'#8a4b00'}return serverOnline}
+async function health(){try{const r=await api({action:'health'},20000,1);if(!r.ok||!r.data||String(r.data.status||'').toUpperCase()!=='ONLINE')throw Error(r.message||'Backend tidak ONLINE');online(true);return true}catch(e){online(false);return false}}
 function localISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function makeEventId(){try{if(window.crypto?.randomUUID)return 'EVT-'+window.crypto.randomUUID()}catch(e){}return 'EVT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,10).toUpperCase()}
 function fmtTime(v){const s=String(v??'').trim();if(!s)return s;if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)){const d=new Date(s);if(!isNaN(d))return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Jakarta'})}const m=s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);if(m)return `${String(m[1]).padStart(2,'0')}:${m[2]}`;return s}
@@ -237,6 +220,8 @@ async function commandCenter(){try{gdrEnsureValid();if($('ccFrom'))$('ccFrom').v
     $('ccHourlyChart').innerHTML='<div class="empty">⚠ Grafik periode gagal dimuat: '+esc(chartErr.message||chartErr)+'</div>';
   }
 }const gates=d.gates||[];$('gateStatus').className=gates.length?'tablewrap':'empty';$('gateStatus').innerHTML=gates.length?'<table class="table"><tr><th>Gate</th><th>Status</th><th>IN</th><th>OUT</th></tr>'+gates.map(g=>`<tr><td>${esc(g.gateName||g.gateId)}</td><td><span class="pill ${g.active?'pgreen':'pred'}">${g.active?'ACTIVE':'INACTIVE'}</span></td><td>${Number(g.todayIn||0)}</td><td>${Number(g.todayOut||0)}</td></tr>`).join('')+'</table>':'Tidak ada gate.';const la=d.lastAccess||[];$('lastAccess').className=la.length?'tablewrap':'empty';$('lastAccess').innerHTML=la.length?'<table class="table"><tr><th>Waktu</th><th>Nama</th><th>Kendaraan</th><th>Gate</th><th>Aksi</th></tr>'+la.map(x=>`<tr><td>${esc(x.time||x.timestamp||'')}</td><td>${esc(x.name||'')}</td><td>${esc(x.plate||x.vehicle||'')}</td><td>${esc(x.gateName||x.gateId||'')}</td><td>${esc(x.action||x.direction||x.type||'')}</td></tr>`).join('')+'</table>':'Belum ada akses.';}catch(e){toast('❌ Command Center: '+(e.message||e));console.error(e)}}
+let masterEditingPlate='';
+function setMasterEditMode(active,plate=''){masterEditingPlate=active?String(plate||'').trim():'';const box=$('masterEditMode'),p=$('mPlate'),b=$('saveMasterBtn');if(box)box.style.display=active?'block':'none';if(p)p.disabled=!!active;if(b)b.textContent=active?'💾 SIMPAN PERUBAHAN':'💾 SIMPAN / UPDATE'}
 function updateCustomAccessUI(){if($('mAccessType')&&$('mCustomAccessType'))$('mCustomAccessType').style.display=$('mAccessType').value==='CUSTOM'?'block':'none';if($('aType')&&$('aCustomType'))$('aCustomType').style.display=$('aType').value==='CUSTOM'?'block':'none'}
 function selectedMasterAccessType(){const v=$('mAccessType')?.value||'VISITOR';return v==='CUSTOM'?String($('mCustomAccessType')?.value||'').trim():v}
 function clearM(){['mName','mPlate','mDiv','mType','mModel','mColor','mCustomAccessType'].forEach(id=>$(id).value='');if($('mAccessType'))$('mAccessType').value='VISITOR';updateCustomAccessUI();setMasterEditMode(false)}
@@ -246,7 +231,7 @@ async function saveM(){
   if(masterEditingPlate&&plate.toUpperCase()!==masterEditingPlate.toUpperCase())return setResult('manualResult','Nomor kendaraan dikunci saat mode edit. Gunakan BERSIHKAN untuk input kendaraan baru.','err');
   const b=$('saveMasterBtn');b.disabled=true;
   try{
-    const r=await call({action:'registerVehicle',name,plate,division:$('mDiv').value.trim(),vehicleType:$('mType').value.trim(),accessType:selectedMasterAccessType()||'VISITOR',model:$('mModel').value.trim(),color:$('mColor').value.trim()});
+    const r=await call({action:'registerVehicle',name,plate,division:$('mDiv').value.trim(),vehicleType:$('mType').value.trim(),accessType:selectedMasterAccessType()||'VISITOR',model:$('mModel').value.trim(),color:$('mColor').value.trim(),pin:adminPin_()});
     if(!r.ok)throw Error(r.message);
     setResult('manualResult','✓ '+(r.data?.message||'Data MASTER berhasil disimpan.'),'ok');
     clearM();
@@ -286,11 +271,22 @@ function loadMasterForEdit(v){
 function clearMasterSearch(){if($('masterSearch'))$('masterSearch').value='';if($('masterSearchResult')){$('masterSearchResult').className='result';$('masterSearchResult').textContent=''}}
 function mapHead(row){const m={};Object.keys(row).forEach(k=>m[k.toLowerCase().replace(/[^a-z0-9]/g,'')]=row[k]);return m}
 function val(m,a){for(const n of a){const k=n.toLowerCase().replace(/[^a-z0-9]/g,'');if(m[k]!==undefined&&String(m[k]).trim()!=='')return m[k]}return ''}
-async function importM(){const f=$('fileInput').files[0];if(!f)return toast('Pilih Excel/CSV terlebih dahulu.');if(!window.XLSX)return toast('Library Excel belum siap. Refresh.');const b=$('importBtn');b.disabled=true;try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}),rows=raw.map(x=>{const m=mapHead(x);return{name:val(m,['nama','namapemilik','pemilik']),plate:val(m,['nomorkendaraan','nopolisi','nopol','nomorpolisi','plate','plat']),division:val(m,['bagian/divisi','bagian','divisi']),vehicleType:val(m,['jeniskendaraan','jeniskendaraan','jenis kendaraan','jenis','tipe']),accessType:val(m,['accesstype','access type','kategori akses','kategori']),model:val(m,['model']),color:val(m,['warnakendaraan','warna'])}}).filter(x=>x.plate);if(!rows.length)throw Error('Kolom Nomor Kendaraan tidak ditemukan.');let c=0,u=0;for(let i=0;i<rows.length;i+=25){const r=await call({action:'importVehicles',rows:JSON.stringify(rows.slice(i,i+25))},30000);c+=r.data.created;u+=r.data.updated;b.textContent=`IMPORT ${Math.min(i+25,rows.length)}/${rows.length}`}$('importResult').textContent=`✓ ${c} baru • ${u} diperbarui`;$('importResult').className='result show ok';dash()}catch(e){$('importResult').textContent='❌ '+e.message;$('importResult').className='result show err'}finally{b.disabled=false;b.textContent='📥 IMPORT / UPDATE MASTER'}}
+async function importM(){const f=$('fileInput').files[0];if(!f)return toast('Pilih Excel/CSV terlebih dahulu.');if(!window.XLSX)return toast('Library Excel belum siap. Refresh.');const b=$('importBtn');b.disabled=true;try{const pin=adminPin_();if(!pin)throw Error('PIN Admin wajib diisi.');const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}),rows=raw.map(x=>{const m=mapHead(x);return{name:val(m,['nama','namapemilik','pemilik']),plate:val(m,['nomorkendaraan','nopolisi','nopol','nomorpolisi','plate','plat']),division:val(m,['bagian/divisi','bagian','divisi']),vehicleType:val(m,['jeniskendaraan','jeniskendaraan','jenis kendaraan','jenis','tipe']),accessType:val(m,['accesstype','access type','kategori akses','kategori']),model:val(m,['model']),color:val(m,['warnakendaraan','warna'])}}).filter(x=>x.plate);if(!rows.length)throw Error('Kolom Nomor Kendaraan tidak ditemukan.');let c=0,u=0;for(let i=0;i<rows.length;i+=25){const r=await call({action:'importVehicles',rows:JSON.stringify(rows.slice(i,i+25)),pin},30000);c+=r.data.created;u+=r.data.updated;b.textContent=`IMPORT ${Math.min(i+25,rows.length)}/${rows.length}`}$('importResult').textContent=`✓ ${c} baru • ${u} diperbarui`;$('importResult').className='result show ok';dash()}catch(e){$('importResult').textContent='❌ '+e.message;$('importResult').className='result show err'}finally{b.disabled=false;b.textContent='📥 IMPORT / UPDATE MASTER'}}
 function template(){if(!window.XLSX)return toast('Library Excel belum siap.');const ws=XLSX.utils.aoa_to_sheet([['Nama','Nomor Kendaraan','Bagian/Divisi','Jenis Kendaraan','Model','Warna Kendaraan','Access Type']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'VEHICLES');XLSX.writeFile(wb,'VACS_VEHICLES_TEMPLATE.xlsx');toast('Template Excel dibuat.')}
-async function current(){try{const r=await call({action:'current'}),a=r.data||[];$('currentList').className=a.length?'tablewrap':'empty';$('currentList').innerHTML=a.length?`<table class="table"><tr><th>Nama</th><th>Nomor Kendaraan</th><th>Divisi</th><th>Access Type</th><th>Jam IN</th><th>Tanggal</th><th>Keterangan</th></tr>${a.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.plate)}</td><td>${esc(x.division)}</td><td>${esc(x.accessType||x.type||'')}</td><td>${esc(fmtTime(x.inTime))}</td><td>${esc(x.date)}</td><td>${esc(x.notes||'')}</td></tr>`).join('')}</table>`:'Tidak ada kendaraan di dalam.'}catch(e){$('currentList').textContent='❌ '+e.message}}
+async function current(){try{const r=await call({action:'current'}),a=r.data||[];try{localStorage.setItem('vacsServerInside',JSON.stringify(a.map(x=>({plate:x.plate,name:x.name||'',inTime:x.inTime||'',date:x.date||''}))))}catch(e){};$('currentList').className=a.length?'tablewrap':'empty';$('currentList').innerHTML=a.length?`<table class="table"><tr><th>Nama</th><th>Nomor Kendaraan</th><th>Divisi</th><th>Access Type</th><th>Jam IN</th><th>Tanggal</th><th>Keterangan</th></tr>${a.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.plate)}</td><td>${esc(x.division)}</td><td>${esc(x.accessType||x.type||'')}</td><td>${esc(fmtTime(x.inTime))}</td><td>${esc(x.date)}</td><td>${esc(x.notes||'')}</td></tr>`).join('')}</table>`:'Tidak ada kendaraan di dalam.'}catch(e){$('currentList').textContent='❌ '+e.message}}
 async function audit(){try{const r=await call({action:'audit',q:$('auditSearch').value}),a=r.data.events||[];$('auditList').className=a.length?'tablewrap':'empty';$('auditList').innerHTML=a.length?`<table class="table"><tr><th>Timestamp</th><th>Created By</th><th>Action</th><th>Nomor Kendaraan</th><th>Nama</th><th>Result</th><th>Detail</th></tr>${a.map(x=>`<tr><td>${esc(fmtTime(x.timestamp))}</td><td>${esc(x.createdBy)}</td><td>${esc(x.action)}</td><td>${esc(x.plate)}</td><td>${esc(x.name)}</td><td>${esc(x.result)}</td><td>${esc(x.detail)}</td></tr>`).join('')}</table>`:'Tidak ada audit event.'}catch(e){$('auditList').textContent='❌ '+e.message}}
-async function backup(){const b=$('backupBtn');b.disabled=true;try{const r=await call({action:'backup'},30000);if(!r.ok)throw Error(r.message);$('backupResult').textContent=`✓ Backup dibuat: ${r.data.name}`;$('backupResult').className='result show ok'}catch(e){$('backupResult').textContent='❌ '+e.message;$('backupResult').className='result show err'}finally{b.disabled=false}}
+function adminPin_(){
+ const existing=String($('adminPin')?.value||'').trim();
+ if(existing)return existing;
+ const p=window.prompt('Masukkan PIN ADMIN VACS:','');
+ return String(p||'').trim();
+}
+function accessToken_(){
+ let t='';try{t=String(localStorage.getItem('vacsAccessToken')||'').trim()}catch(e){}
+ if(!t){t=String(window.prompt('Masukkan ACCESS TOKEN VACS:','')||'').trim();if(t)try{localStorage.setItem('vacsAccessToken',t)}catch(e){}}
+ return t;
+}
+async function backup(){const b=$('backupBtn');b.disabled=true;try{const r=await call({action:'backup',pin:adminPin_()},30000);if(!r.ok)throw Error(r.message);$('backupResult').textContent=`✓ Backup dibuat: ${r.data.name}`;$('backupResult').className='result show ok'}catch(e){$('backupResult').textContent='❌ '+e.message;$('backupResult').className='result show err'}finally{b.disabled=false}}
 function isoDateToLog(v){const s=String(v??'').trim();const m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);return m?String(m[3]).padStart(2,'0')+'/'+String(m[2]).padStart(2,'0')+'/'+m[1]:s}
 function hariTanggal(v){const s=String(v??'').trim();let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);if(!m)return s;const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]);const dt=new Date(Date.UTC(y,mo-1,d));const hari=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][dt.getUTCDay()];return `${hari}, ${String(d).padStart(2,'0')} ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][mo-1]} ${y}`}
 function fileDateName(v){const s=String(v??'').trim();let d,mo,y;let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);if(m){d=Number(m[1]);mo=Number(m[2]);y=Number(m[3])}else{m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m){y=Number(m[1]);mo=Number(m[2]);d=Number(m[3])}else{const dt=new Date();y=dt.getFullYear();mo=dt.getMonth()+1;d=dt.getDate()}}const dt=new Date(Date.UTC(y,mo-1,d));const hari=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][dt.getUTCDay()];return `${hari},_${String(d).padStart(2,'0')}_${String(mo).padStart(2,'0')}_${y}`}
@@ -341,9 +337,15 @@ async function gateAccess(act){
   const gateLabel=($('gateSelect').selectedOptions[0]?.textContent)||'GATE';
   const results=[];
   try{
+    const pending=await queueAll().catch(()=>[]);
+    const base=JSON.parse(localStorage.getItem('vacsServerInside')||'[]');
+    const state={};(base||[]).forEach(x=>state[String(x.plate||'').toUpperCase()]=true);
+    pending.slice().sort((a,b)=>String(a.localTimestamp||'').localeCompare(String(b.localTimestamp||''))||Number(a.queuedAt||0)-Number(b.queuedAt||0)).forEach(x=>{const p=x.payload||{};const k=String(p.plate||'').toUpperCase();if(k&&p.activity)state[k]=String(p.activity).toUpperCase()==='IN'});
     for(let i=0;i<list.length;i++){
       const v=list[i];setResult('result',`⏳ ${act} ${i+1}/${list.length} • ${v.plate}`,'warn');
-      const payload={action:'access',plate:v.plate,activity:act,gateId:$('gateSelect').value,device:$('deviceId').value.trim()||device(),notes:$('gateNotes')?.value||'',localTimestamp:new Date().toISOString(),eventId:makeEventId()};
+      const stateKey=String(v.plate||'').toUpperCase();if((act==='IN'&&state[stateKey]===true)||(act==='OUT'&&state[stateKey]===false)){results.push({plate:v.plate,eventId:'',status:'REJECTED',message:act==='IN'?'DITAHAN LOKAL — kendaraan masih tercatat DI DALAM.':'DITAHAN LOKAL — tidak ada IN aktif.'});continue;}
+      state[stateKey]=(act==='IN');
+      const token=accessToken_();if(!token)throw Error('ACCESS TOKEN wajib diisi.');const payload={action:'access',plate:v.plate,activity:act,gateId:$('gateSelect').value,device:$('deviceId').value.trim()||device(),notes:$('gateNotes')?.value||'',localTimestamp:new Date().toISOString(),eventId:makeEventId(),accessToken:token};
       try{await queueAdd({eventId:payload.eventId,kind:'gate',localTimestamp:payload.localTimestamp,payload});results.push({plate:v.plate,eventId:payload.eventId,status:'QUEUED',message:`${act} TERSIMPAN \u2022 MENUNGGU SYNC`})}
       catch(e){results.push({plate:v.plate,eventId:payload.eventId,status:'ERROR',message:'Gagal menyimpan transaksi lokal: '+(e.message||e)})}
     }
@@ -385,98 +387,122 @@ function initTypes(){const opts=TYPES.map(x=>`<option value="${esc(x)}">${esc(x)
 function authValid(a){const now=new Date(),day=now.toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),t=now.toLocaleTimeString('en-GB',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hour12:false});return a.status==='ACTIVE'&&(!a.validFromDate||day>=String(a.validFromDate).slice(0,10))&&(!a.validUntilDate||day<=String(a.validUntilDate).slice(0,10))&&(!a.timeFrom||!a.timeUntil||((a.timeFrom<=a.timeUntil)?t>=a.timeFrom&&t<=a.timeUntil:(t>=a.timeFrom||t<=a.timeUntil)))}
 async function refreshAuth(){try{const d=await call({action:'authorizations'});authCache=d.data?.found||[];localStorage.setItem('vacsAuthCache',JSON.stringify(authCache));renderAuth();setResult('authResult',`✓ ${authCache.length} authorization tersedia; cache offline diperbarui.`)}catch(e){authCache=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');renderAuth();setResult('authResult','OFFLINE — memakai cache authorization lokal.','warn')}}
 function renderAuth(){const a=authCache;$('authTable').className=a.length?'tablewrap':'empty';$('authTable').innerHTML=a.length?'<table class="table"><tr><th>Auth ID</th><th>Person</th><th>Type</th><th>Company</th><th>Plate</th><th>Purpose</th><th>Host</th><th>Gate</th><th>Validity</th><th>Status</th></tr>'+a.map(x=>`<tr><td>${esc(x.authId)}</td><td>${esc(x.personName)}</td><td>${esc(accessTypeNorm(x.type))}</td><td>${esc(x.company)}</td><td>${esc(x.plate)}</td><td>${esc(x.purpose)}</td><td>${esc(x.host)}</td><td>${esc(x.gateAllowed)}</td><td>${esc(x.validFromDate)} → ${esc(x.validUntilDate)} ${esc(x.timeFrom)}-${esc(x.timeUntil)}</td><td>${esc(x.status)}</td></tr>`).join('')+'</table>':'Tidak ada authorization.'}
-async function createAuth(){try{const type=$('aType').value==='CUSTOM'?String($('aCustomType')?.value||'').trim():$('aType').value;if(!type)throw Error('Custom Access Type wajib diisi.');const d=await call({action:'createAuthorization',personName:$('aPerson').value,type,company:$('aCompany').value,plate:$('aPlate').value,purpose:$('aPurpose').value,host:$('aHost').value,gateAllowed:$('aGate').value,validFromDate:$('aFrom').value,validUntilDate:$('aUntil').value,timeFrom:$('aTimeFrom').value,timeUntil:$('aTimeUntil').value});setResult('authResult','✓ '+d.data.message);await refreshAuth()}catch(e){setResult('authResult','❌ '+e.message,'err')}}
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(IDB.name,2);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(IDB.queue))db.createObjectStore(IDB.queue,{keyPath:'eventId'});if(!db.objectStoreNames.contains(IDB.master))db.createObjectStore(IDB.master,{keyPath:'plate'});if(!db.objectStoreNames.contains(IDB.meta))db.createObjectStore(IDB.meta,{keyPath:'key'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
-async function queueAdd(x){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(IDB.queue,'readwrite');tx.objectStore(IDB.queue).put(x);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
+async function createAuth(){try{const type=$('aType').value==='CUSTOM'?String($('aCustomType')?.value||'').trim():$('aType').value;if(!type)throw Error('Custom Access Type wajib diisi.');const d=await call({action:'createAuthorization',pin:adminPin_(),personName:$('aPerson').value,type,company:$('aCompany').value,plate:$('aPlate').value,purpose:$('aPurpose').value,host:$('aHost').value,gateAllowed:$('aGate').value,validFromDate:$('aFrom').value,validUntilDate:$('aUntil').value,timeFrom:$('aTimeFrom').value,timeUntil:$('aTimeUntil').value});setResult('authResult','✓ '+d.data.message);await refreshAuth()}catch(e){setResult('authResult','❌ '+e.message,'err')}}
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(IDB.name,4);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(IDB.queue))db.createObjectStore(IDB.queue,{keyPath:'eventId'});if(!db.objectStoreNames.contains(IDB.master))db.createObjectStore(IDB.master,{keyPath:'plate'});if(!db.objectStoreNames.contains(IDB.meta))db.createObjectStore(IDB.meta,{keyPath:'key'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function queueAdd(x){x={...x,queuedAt:Number(x.queuedAt||Date.now())};const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(IDB.queue,'readwrite');tx.objectStore(IDB.queue).put(x);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
 async function queueAll(){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(IDB.queue,'readonly'),r=tx.objectStore(IDB.queue).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)})}
 async function queueClear(ids){if(!ids.length)return;const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(IDB.queue,'readwrite'),st=tx.objectStore(IDB.queue);ids.forEach(id=>st.delete(id));tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
 function normMaster(v){return{name:String(v.name??'').trim().toUpperCase(),plate:String(v.plate??'').trim().toUpperCase(),division:String(v.division??'').trim().toUpperCase(),type:String(v.type??'').trim().toUpperCase(),model:String(v.model??'').trim().toUpperCase(),color:String(v.color??'').trim().toUpperCase(),accessType:accessTypeNorm(v.accessType)}}
-async function masterPutAll(items){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction([IDB.master,IDB.meta],'readwrite'),st=tx.objectStore(IDB.master),meta=tx.objectStore(IDB.meta);st.clear();for(const x of items||[]){const v=normMaster(x);if(v.plate)st.put(v)}meta.put({key:'updatedAt',value:new Date().toISOString()});tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
+async function masterPutAll(items,metaInfo={}){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction([IDB.master,IDB.meta],'readwrite'),st=tx.objectStore(IDB.master),meta=tx.objectStore(IDB.meta);st.clear();for(const x of items||[]){const v=normMaster(x);if(v.plate)st.put(v)}if(metaInfo.revision)meta.put({key:'masterRevision',value:String(metaInfo.revision)});if(metaInfo.count!=null)meta.put({key:'masterCount',value:Number(metaInfo.count)});meta.put({key:'updatedAt',value:new Date().toISOString()});tx.oncomplete=res;tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error)})}
 async function masterAll(){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(IDB.master,'readonly'),r=tx.objectStore(IDB.master).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)})}
 async function offlineMasterSearch(q){const a=await masterAll(),n=String(q||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const qs=String(q||'').toUpperCase();const found=a.filter(v=>String(v.plate).toUpperCase().replace(/[^A-Z0-9]/g,'').includes(n)||String(v.name).toUpperCase().includes(qs)||String(v.division||'').toUpperCase().includes(qs)).slice(0,50);return{found}}
 async function masterCount(){try{return(await masterAll()).length}catch(e){return 0}}
 function setMasterStatus(t,cls){const el=$('masterCacheStatus');if(!el)return;el.textContent=t;el.style.color=cls==='ok'?'#15803d':cls==='warn'?'#c56a08':'#dc2626'}
-async function syncMasterCache(){try{const d=await call({action:'masterVehicles'},30000);if(d&&d.ok===false)throw Error(d.message||'MASTER endpoint belum tersedia');const items=(d.data?.vehicles||[]).map(x=>({...x,accessType:accessTypeNorm(x.accessType)}));if(!items.length)throw Error('MASTER kosong dari server');await masterPutAll(items);mergeAccessTypeOptions(items.map(x=>x.accessType));online(true);setMasterStatus(`• SERVER MASTER ${items.length} • LOCAL CACHE ${items.length}`,'ok');return items.length}catch(e){const n=await masterCount();setMasterStatus(n?`• SERVER TERGANGGU • LOCAL MASTER ${n} (cached)`:'• SERVER BELUM TERJANGKAU • LOCAL MASTER BELUM TERSEDIA','warn');return n}}
-async function offlineAuth(act){const person=$('xPerson').value.trim(),plate=$('xPlate').value.trim(),gate=$('xGate').value;if(!person&&!plate)return setResult('offlineInfo','Person atau plate wajib.','err');const a=authCache.find(x=>(plate&&String(x.plate).replace(/\W/g,'').toUpperCase()===plate.replace(/\W/g,'').toUpperCase())||(person&&String(x.personName).toUpperCase()===person.toUpperCase()));if(!a||!authValid(a))return setResult('offlineInfo','🚫 OFFLINE DENIED — authorization tidak valid / expired / di luar jadwal.','err');if(a.gateAllowed&&a.gateAllowed!=='ALL'&&!String(a.gateAllowed).split(/[,|;]/).map(x=>x.trim().toUpperCase()).includes(gate.toUpperCase()))return setResult('offlineInfo','🚫 OFFLINE DENIED — gate tidak diizinkan.','err');const eventId=makeEventId(),item={eventId,kind:'auth',localTimestamp:new Date().toISOString(),payload:{personName:a.personName,plate:a.plate,type:a.type,company:a.company,purpose:a.purpose,host:a.host,gateId:gate,activity:act,device:$('xDevice').value||device()}};await queueAdd(item);setResult('offlineInfo',`✓ ${act} QUEUED OFFLINE • ${eventId}`,'ok');try{await syncQueue()}catch(e){}}
+async function syncMasterCache(){
+  let d;
+  try{
+    d=await call({action:'masterVehicles'},30000);
+    if(d&&d.ok===false)throw Error(d.message||'MASTER endpoint belum tersedia');
+  }catch(e){
+    const n=await masterCount();
+    setMasterStatus(n?`• OFFLINE READY • LOCAL MASTER ${n} (cached)`:'• OFFLINE — NO MASTER','warn');
+    return n;
+  }
+  const data=d?.data||{};
+  const vehicles=Array.isArray(data.vehicles)?data.vehicles:[];
+  const revision=String(data.revision||'').trim();
+  const count=Number(data.count??vehicles.length);
+  if(!vehicles.length||!revision||vehicles.length!==count){
+    const n=await masterCount();
+    setMasterStatus(n?`• STALE — snapshot server invalid • LOCAL MASTER ${n} (cached)`:'• STALE — MASTER kosong dari server','warn');
+    return n;
+  }
+  const db=await openDB();
+  const localRev=await new Promise(res=>{
+    const tx=db.transaction(IDB.meta,'readonly');
+    const r=tx.objectStore(IDB.meta).get('masterRevision');
+    r.onsuccess=()=>res(String(r.result?.value||''));
+    r.onerror=()=>res('');
+  });
+  const items=vehicles.map(x=>({...x,accessType:accessTypeNorm(x.accessType)}));
+  if(localRev===revision){
+    mergeAccessTypeOptions(items.map(x=>x.accessType));
+    online(true);
+    setMasterStatus(`• LIVE • MASTER ${count} (rev ${revision.slice(0,10)})`,'ok');
+    return count;
+  }
+  await new Promise((res,rej)=>{
+    const tx=db.transaction([IDB.master,IDB.meta],'readwrite');
+    const st=tx.objectStore(IDB.master),meta=tx.objectStore(IDB.meta);
+    st.clear();
+    for(const x of items){const v=normMaster(x);if(v.plate)st.put(v)}
+    meta.put({key:'masterRevision',value:revision});
+    meta.put({key:'masterCount',value:count});
+    meta.put({key:'updatedAt',value:new Date().toISOString()});
+    tx.oncomplete=res;
+    tx.onerror=()=>rej(tx.error);
+    tx.onabort=()=>rej(tx.error||new Error('MASTER transaction aborted'));
+  });
+  mergeAccessTypeOptions(items.map(x=>x.accessType));
+  online(true);
+  setMasterStatus(`• LIVE • MASTER ${count} (rev ${revision.slice(0,10)}) SYNCED`,'ok');
+  return count;
+}
+async function offlineAuth(act){const person=$('xPerson').value.trim(),plate=$('xPlate').value.trim(),gate=$('xGate').value;if(!person&&!plate)return setResult('offlineInfo','Person atau plate wajib.','err');const a=authCache.find(x=>(plate&&String(x.plate).replace(/\W/g,'').toUpperCase()===plate.replace(/\W/g,'').toUpperCase())||(person&&String(x.personName).toUpperCase()===person.toUpperCase()));if(!a||!authValid(a))return setResult('offlineInfo','🚫 OFFLINE DENIED — authorization tidak valid / expired / di luar jadwal.','err');if(a.gateAllowed&&a.gateAllowed!=='ALL'&&!String(a.gateAllowed).split(/[,|;]/).map(x=>x.trim().toUpperCase()).includes(gate.toUpperCase()))return setResult('offlineInfo','🚫 OFFLINE DENIED — gate tidak diizinkan.','err');const token=accessToken_();if(!token)return setResult('offlineInfo','ACCESS TOKEN wajib diisi.','err');const eventId=makeEventId(),item={eventId,kind:'auth',localTimestamp:new Date().toISOString(),payload:{personName:a.personName,plate:a.plate,type:a.type,company:a.company,purpose:a.purpose,host:a.host,gateId:gate,activity:act,device:$('xDevice').value||device(),accessToken:token}};await queueAdd(item);setResult('offlineInfo',`✓ ${act} QUEUED OFFLINE • ${eventId}`,'ok');try{await syncQueue()}catch(e){}}
 function showConflict(item,msg){const plate=item?.payload?.plate||'kendaraan';const box=document.createElement('div');box.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';box.innerHTML=`<div style="max-width:520px;width:100%;background:#fff;border-radius:18px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><h2 style="margin:0 0 12px;color:#b91c1c">⚠️ TRANSAKSI TIDAK DIBUAT</h2><p style="font-weight:700;font-size:18px">Kendaraan ${esc(plate)} tidak diproses dari transaksi offline ini.</p><p>Server menolak transaksi karena kendaraan sudah memiliki transaksi yang lebih dahulu / status akses tidak memungkinkan.</p><p style="color:#64748b;font-size:13px">Detail server: ${esc(msg||'Transaksi ditolak')}</p><button class="btn blue" style="width:100%" onclick="this.closest('div[style*=fixed]').remove()">OK</button></div>`;document.body.appendChild(box)}
+let __vacsSyncInFlight=null;
 async function syncQueue(){
-  const items=await queueAll();
+ if(__vacsSyncInFlight)return __vacsSyncInFlight;
+ __vacsSyncInFlight=(async()=>{
+  const items=(await queueAll()).slice().sort((a,b)=>String(a.localTimestamp||'').localeCompare(String(b.localTimestamp||''))||Number(a.queuedAt||0)-Number(b.queuedAt||0)||String(a.eventId||'').localeCompare(String(b.eventId||'')));
   if(!items.length)return[];
-  const BATCH_SIZE=5;
-  const allResults=[];
-  let transportFailed=false;
-
+  const BATCH_SIZE=5,allResults=[];let transportFailed=false;
   function applyBatchResults(batch,rs){
-    const returned=new Set(rs.map(r=>String(r.eventId||'')));
-    const clear=[];
-    rs.forEach(r=>{
-      if(r.status==='SYNCED'){clear.push(r.eventId);r.cleared=true}
-      else if(r.status==='FAILED'){
-        const item=batch.find(x=>x.eventId===r.eventId);
-        const msg=String(r.message||'');
-        const serverDenied=r.denied===true||r.cleared===true;
-        const legacyDenied=/KENDARAAN MASIH DI DALAM|DUPLICATE_IN|TIDAK ADA IN AKTIF|NO_ACTIVE_IN|SUDAH DIPROSES|DUPLIKAT/i.test(msg);
-        if(serverDenied || legacyDenied){
-          clear.push(r.eventId);r.cleared=true;
-          if(r.denied||legacyDenied)showConflict(item,msg);
-        }else r.cleared=false;
-      }
-    });
-    batch.forEach(item=>{
-      if(!returned.has(String(item.eventId))){
-        allResults.push({eventId:item.eventId,status:'FAILED',message:'Server tidak mengembalikan hasil transaksi ini.',cleared:false});
-      }
-    });
-    allResults.push(...rs);
-    return queueClear(clear);
+   const returned=new Set(rs.map(r=>String(r.eventId||''))),clear=[];
+   rs.forEach(r=>{
+    if(r.status==='SYNCED'){clear.push(r.eventId);r.cleared=true}
+    else if(r.status==='DENIED'){clear.push(r.eventId);r.cleared=true;const item=batch.find(x=>x.eventId===r.eventId);if(item)showConflict(item,String(r.message||'DITOLAK SERVER'))}
+    else if(r.status==='CONFLICT'){clear.push(r.eventId);r.cleared=true;const item=batch.find(x=>x.eventId===r.eventId);if(item)showConflict(item,String(r.message||'EVENT CONFLICT'))}
+    else if(r.status==='FAILED')r.cleared=!!r.cleared;
+   });
+   batch.forEach(item=>{if(!returned.has(String(item.eventId)))allResults.push({eventId:item.eventId,status:'FAILED',message:'Server tidak mengembalikan hasil transaksi ini.',cleared:false})});
+   allResults.push(...rs);return queueClear(clear);
   }
-
+  const token=accessToken_();if(!token)throw Error('ACCESS TOKEN wajib diisi sebelum sinkronisasi.');
   for(let i=0;i<items.length;i+=BATCH_SIZE){
-    const batch=items.slice(i,i+BATCH_SIZE);
-    try{
-      // The server hot path is now lightweight. Keep a generous timeout because
-      // Apps Script can still have cold-start/redirect latency on Android.
-      const d=await call({action:'syncQueue',events:JSON.stringify(batch)},10000);
-      if(d&&d.ok===false)throw Error(d.message||'Sync ditolak server');
-      const rs=Array.isArray(d.data?.results)?d.data.results:[];
-      await applyBatchResults(batch,rs);
-    }catch(e){
-      // IMPORTANT: A transport timeout does NOT prove that the write failed.
-      // The old code immediately left everything in IDB, producing the exact
-      // false "TERSIMPAN (BELUM SYNC)" state seen by the user even when the
-      // Spreadsheet had already received the transaction.
-      try{
-        const vr=await call({action:'verifyEvents',eventIds:JSON.stringify(batch.map(x=>x.eventId))},10000);
-        if(vr&&vr.ok===true&&Array.isArray(vr.data?.results)){
-          const verified=vr.data.results.filter(r=>r.status==='SYNCED'||(r.status==='FAILED'&&r.cleared));
-          if(verified.length){
-            await applyBatchResults(batch,vr.data.results);
-            continue;
-          }
-        }
-      }catch(verifyErr){
-        console.debug('[VACS] verifyEvents failed',verifyErr);
+   const batch=items.slice(i,i+BATCH_SIZE);
+   try{
+    const d=await call({action:'syncQueue',events:JSON.stringify(batch),accessToken:token},10000);
+    if(d&&d.ok===false)throw Error(d.message||'Sync ditolak server');
+    await applyBatchResults(batch,Array.isArray(d.data?.results)?d.data.results:[]);
+   }catch(e){
+    // Unknown commit state: verify repeatedly, never blind retry the mutation.
+    let verified=false;
+    for(let attempt=0;attempt<3&&!verified;attempt++){
+     try{
+      if(attempt)await sleep_(700);
+      const vr=await call({action:'verifyEvents',eventIds:JSON.stringify(batch.map(x=>x.eventId))},10000);
+      if(vr&&vr.ok===true&&Array.isArray(vr.data?.results)){
+       const rr=vr.data.results;
+       const unresolved=rr.filter(r=>r.status==='UNKNOWN');
+       if(!unresolved.length){await applyBatchResults(batch,rr);verified=true;break;}
       }
-      transportFailed=true;
-      online(false);
-      break;
+     }catch(verifyErr){console.debug('[VACS] verifyEvents failed',verifyErr)}
     }
+    if(!verified){transportFailed=true;online(false);break;}
+   }
   }
-
-  const synced=allResults.filter(x=>x.status==='SYNCED').length;
-  const failed=allResults.filter(x=>x.status==='FAILED').length;
-  const remaining=(await queueAll()).length;
-  setResult('offlineInfo',transportFailed
-    ? `⚠ SYNC BERHENTI SEMENTARA • ${synced} synced • ${failed} gagal diproses • ${remaining} masih di queue.`
-    : `✓ SYNC SELESAI • ${synced} synced • ${failed} ditolak/gagal • ${remaining} masih di queue.`,
-    remaining?'warn':'ok');
+  const synced=allResults.filter(x=>x.status==='SYNCED').length,failed=allResults.filter(x=>x.status==='FAILED').length,denied=allResults.filter(x=>x.status==='DENIED'||x.status==='CONFLICT').length,remaining=(await queueAll()).length;
+  setResult('offlineInfo',transportFailed?`⚠ SYNC BERHENTI • ${synced} synced • ${denied} ditolak/conflict • ${remaining} masih di queue.`:`✓ SYNC SELESAI • ${synced} synced • ${denied} ditolak/conflict • ${failed} gagal/unknown • ${remaining} masih di queue.`,remaining?'warn':'ok');
   return allResults;
+ })();
+ try{return await __vacsSyncInFlight}finally{__vacsSyncInFlight=null}
 }
 function renderCurrent(a){$('currentList').className=a.length?'tablewrap':'empty';$('currentList').innerHTML=a.length?'<table class="table"><tr><th>Nama</th><th>Plate</th><th>Divisi</th><th>IN</th><th>Tanggal</th><th>Keterangan</th></tr>'+a.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.plate)}</td><td>${esc(x.division)}</td><td>${esc(fmtTime(x.inTime))}</td><td>${esc(x.date)}</td><td>${esc(x.notes||'')}</td></tr>`).join('')+'</table>':'Tidak ada kendaraan di dalam.'}
 async function exceptions(){try{const d=await call({action:'exceptions',q:$('exceptionSearch').value});const a=d.data?.events||[];$('exceptionList').className=a.length?'tablewrap':'empty';$('exceptionList').innerHTML=a.length?'<table class="table"><tr><th>Timestamp</th><th>Event</th><th>Person</th><th>Plate</th><th>Type</th><th>Gate</th><th>Reason</th><th>Device</th></tr>'+a.map(x=>`<tr><td>${esc(fmtTime(x.timestamp))}</td><td>${esc(x.eventId)}</td><td>${esc(x.personName)}</td><td>${esc(x.plate)}</td><td>${esc(x.type)}</td><td>${esc(x.gateName)}</td><td><span class="pill pred">${esc(x.reason)}</span></td><td>${esc(x.device)}</td></tr>`).join('')+'</table>':'Tidak ada denied event.'}catch(e){toast(e.message)}}
 async function alerts(){try{const d=await call({action:'alerts'}),a=d.data?.alerts||[];$('alertList').className=a.length?'tablewrap':'empty';$('alertList').innerHTML=a.length?'<table class="table"><tr><th>Alert</th><th>Type</th><th>Severity</th><th>Time</th><th>Person</th><th>Plate</th><th>Status</th><th>Action</th></tr>'+a.map(x=>`<tr><td>${esc(x.alertId)}</td><td>${esc(x.type)}</td><td>${esc(x.severity)}</td><td>${esc(fmtTime(x.timestamp))}</td><td>${esc(x.person)}</td><td>${esc(x.plate)}</td><td>${esc(x.status)}</td><td><button class="btn" onclick="ack('${esc(x.alertId)}')">ACK</button> <button class="btn" onclick="resolveA('${esc(x.alertId)}')">RESOLVE</button></td></tr>`).join('')+'</table>':'Tidak ada alert.'}catch(e){toast(e.message)}}
-async function ack(id){try{await call({action:'ackAlert',alertId:id});alerts();commandCenter()}catch(e){toast(e.message)}}
-async function resolveA(id){try{await call({action:'resolveAlert',alertId:id});alerts();commandCenter()}catch(e){toast(e.message)}}
+async function ack(id){try{await call({action:'ackAlert',alertId:id,pin:adminPin_()});alerts();commandCenter()}catch(e){toast(e.message)}}
+async function resolveA(id){try{await call({action:'resolveAlert',alertId:id,pin:adminPin_()});alerts();commandCenter()}catch(e){toast(e.message)}}
 async function exportReport(){if(!lastReport)return toast('Generate report dulu.');try{
   const clean=v=>String(v??'');
   const rows=lastReport.rows||[],s=lastReport.summary||{};
@@ -737,30 +763,35 @@ async function __vacsRecover(){
   }
 }
 (async()=>{
-  // SERVER-FIRST: the application is not allowed to present local cache as the
-  // authoritative connection state. Authenticate the backend first, then load
-  // the server data in parallel. Local cache remains only for offline fallback.
-  serverConnecting();
-  let ok=false;
-  try{ok=await health()}catch(e){ok=false}
-  if(ok){
-    await Promise.allSettled([
-      syncMasterCache(),
+  // FIRST PAINT: local cache only. Never wait for a network call before the gate is usable.
+  online(false);
+  try{
+    const cached=await masterAll();
+    try{const raw=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');authCache=Array.isArray(raw)?raw:[];renderAuth()}catch(e){authCache=[];renderAuth()}
+    if(cached.length){
+      mergeAccessTypeOptions(cached.map(x=>x.accessType));
+      setMasterStatus(`• LOCAL CACHE ${cached.length} • MEMUAT SERVER...`,'warn');
+    }else{
+      setMasterStatus('• LOCAL CACHE BELUM TERSEDIA • MEMUAT SERVER...','warn');
+    }
+  }catch(e){
+    authCache=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');
+    renderAuth();
+  }
+  // Network hydration is deliberately background and parallel.
+  setTimeout(()=>{
+    Promise.allSettled([
+      health(),
       loadGates(),
       refreshAuth(),
       dash(),
       syncQueue()
-    ]);
-  }else{
-    try{
-      const raw=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');
-      authCache=Array.isArray(raw)?raw:[];
-      renderAuth();
-      const cached=await masterCount();
-      setMasterStatus(cached?`• SERVER OFFLINE • LOCAL CACHE ${cached} (OFFLINE ONLY)`:'• SERVER OFFLINE • NO LOCAL MASTER','warn');
-    }catch(e){}
-  }
-  setTimeout(__vacsRecover,15000);
+    ]).then(()=>{
+      // Master is usually the largest payload; do it independently so it cannot delay first paint.
+      syncMasterCache().catch(e=>console.debug('[VACS] initial master refresh',e));
+    });
+  },0);
+  setTimeout(__vacsRecover,__vacsReconnectDelay);
 })();
 window.addEventListener('online',()=>{__vacsReconnectDelay=15000;__vacsRecover()});
 </script><script>
