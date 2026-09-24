@@ -80,7 +80,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbyMs5frM0Y0vtDWN6UVhdFL_wrm02ZlkYbjc3mQ5Tnr4WfjzMWQxAArvN2eDxfiJxCkMw/exec"
+  "https://script.google.com/macros/s/AKfycbyFW6V_RI9DlH2NBxkyY3Fl7CiAQkCp9Ke4_qVct_93-9TUufeZ0HTrXa3mkD-N4UJFew/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -119,41 +119,43 @@ async function call(p,t=20000){
   // can turn a lost ACK into a second state evaluation.
   return api(p,t,mutating.has(a)?0:(isOperaMini?2:1));
 }
-function online(v){if(arguments.length){serverOnline=!!v;$('status').textContent=serverOnline?'● READY • SERVER ONLINE':'● READY • LOCAL MODE';$('status').classList.toggle('online',serverOnline);$('status').style.background=serverOnline?'#145b3b':'#8a4b00'}return serverOnline}
-async function pingServer(){const started=performance.now();const r=await api({action:'ping'},12000,1);if(!r.ok||!r.data||String(r.data.status||'').toUpperCase()!=='ONLINE')throw Error(r.message||'GAS/Spreadsheet tidak READY');return {...r.data,clientRttMs:Math.round(performance.now()-started)}}
-async function health(){try{const d=await pingServer();online(true);setMasterStatus(`• LIVE • GAS ✓ • SHEET ✓ • RTT ${d.clientRttMs}ms`,'ok');return true}catch(e){online(false);setMasterStatus('• SERVER TIDAK TERJANGKAU • koneksi GAS/Spreadsheet gagal','warn');return false}}
-function localISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
-function makeEventId(){try{if(window.crypto?.randomUUID)return 'EVT-'+window.crypto.randomUUID()}catch(e){}return 'EVT-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,10).toUpperCase()}
-function fmtTime(v){const s=String(v??'').trim();if(!s)return s;if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)){const d=new Date(s);if(!isNaN(d))return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Jakarta'})}const m=s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);if(m)return `${String(m[1]).padStart(2,'0')}:${m[2]}`;return s}
-const TYPE_COLORS={VISITOR:'#22c55e',CONTRACTOR:'#3b82f6',VENDOR:'#f97316',EMPLOYEE:'#8b5cf6','EMERGENCY VEHICLE':'#ef4444',DELIVERY:'#eab308','TEMPORARY VEHICLE':'#22d3ee',VIP:'#92400e'};
-function typeClass(t){return 'cat'+String(t||'').replace(/[^A-Za-z]/g,'').replace(/^./,c=>c.toUpperCase())}
-async function dash(){try{if(!$('dashDate').value)$('dashDate').value=localISO();const type=$('dashType').value||'ALL';const r=await call({action:'commandCenter',date:$('dashDate').value,type},90000);if(!r.ok)throw Error(r.message||'Dashboard gagal dimuat.');const d=r.data||{},ss=d.summary||{};$('todayIn').textContent=ss.totalIn??0;$('todayOut').textContent=ss.totalOut??0;$('inside').textContent=ss.totalInside??0;$('carryoverInside').textContent=ss.carryoverInside??0;$('carsIn').textContent=ss.cars??0;$('motorcyclesIn').textContent=ss.motorcycles??0;const groups=d.insideByEntryDate||[];const box=$('carryoverDashboard');if(box){box.style.display=groups.length?'block':'none';box.innerHTML=groups.length?`<div class="label">📌 ASAL KENDARAAN YANG MASIH DI DALAM</div>${groups.map(g=>`<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>${esc(g.label||g.date)}</b> — ${Number(g.count||0)} kendaraan</div>`).join('')}<div class="hint" style="margin-top:8px">STILL INSIDE = kendaraan yang belum OUT, termasuk kendaraan dari tanggal/tahun sebelumnya sampai benar-benar OUT.</div>`:''}const detail=$('insideBreakdownDashboard');if(detail){const todayInside=Number((groups.find(g=>g.date===$('dashDate').value)||{}).count||0);const old=groups.filter(g=>g.date!==$('dashDate').value).reduce((a,g)=>a+Number(g.count||0),0);detail.innerHTML=`<div class="label">PENJELASAN STILL INSIDE</div><div class="hint"><b>${todayInside}</b> kendaraan dari IN hari ini masih di dalam + <b>${old}</b> kendaraan dari tanggal sebelumnya yang belum OUT = <b>${Number(ss.totalInside||0)}</b> kendaraan masih di dalam.</div>`}if($('hourlyChart'))$('hourlyChart').innerHTML=renderHourlyChart(d.hourly||[],{title:isoToLong($('dashDate').value)})}catch(e){toast('❌ Dashboard gagal dimuat: '+(e.message||e))}}
-// Plain-SVG bar chart, no external chart library. Two bars per hour: green = masuk, red = keluar.
-// opts.title = label tanggal untuk header grafik (dipakai juga saat export PDF/Excel).
-function isoToLong(iso){const s=String(iso||'').trim();const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return s;const y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]);const dt=new Date(Date.UTC(y,mo-1,d));const hari=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][dt.getUTCDay()];return `${hari}, ${String(d).padStart(2,'0')} ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][mo-1]} ${y}`}
-function renderHourlyChart(hourly,opts){
-  opts=opts||{};
-  if(!hourly||!hourly.length)return '<div class="empty">Belum ada data transaksi untuk tanggal ini.</div>';
-  const w=760,h=240,padL=34,padR=12,padT=30,padB=28;
-  const chartW=w-padL-padR,chartH=h-padT-padB,barsW=chartW/24,bw=(barsW-4)/2;
-  const maxVal=Math.max(1,...hourly.map(x=>Math.max(x.in||0,x.out||0)));
-  const totalIn=hourly.reduce((a,x)=>a+(x.in||0),0),totalOut=hourly.reduce((a,x)=>a+(x.out||0),0);
-  const scale=v=>chartH*(v/maxVal);
-  let grid='',steps=4;
-  for(let i=0;i<=steps;i++){
-    const gy=padT+chartH-(chartH*i/steps),val=Math.round(maxVal*i/steps);
-    grid+=`<line x1="${padL}" y1="${gy.toFixed(1)}" x2="${w-padR}" y2="${gy.toFixed(1)}" stroke="#e2e8f0" stroke-width="1"/><text x="${padL-5}" y="${(gy+3).toFixed(1)}" font-size="9" text-anchor="end" fill="#94a3b8">${val}</text>`;
+let connectionState='OFFLINE';
+function setConnectionState_(state,detail){
+  connectionState=state;
+  const el=$('status');
+  if(!el)return;
+  const map={
+    CONNECTING:['● CONNECTING • MENGHUBUNGKAN','#8a4b00',false],
+    VERIFYING:['● VERIFYING • MEMERIKSA GAS / SPREADSHEET','#8a4b00',false],
+    SYNCING:['● SYNCING • MEMUAT MASTER','#8a4b00',false],
+    LIVE:['● LIVE • SERVER ONLINE','#145b3b',true],
+    OFFLINE_READY:['● OFFLINE READY • MASTER LOKAL SIAP','#8a4b00',false],
+    OFFLINE:['● OFFLINE • SERVER TIDAK TERJANGKAU','#8a4b00',false]
+  };
+  const x=map[state]||map.OFFLINE;
+  el.textContent=x[0];el.classList.toggle('online',x[2]);el.style.background=x[1];
+  if(detail)el.title=detail;
+  serverOnline=state==='LIVE';
+}
+function online(v){if(arguments.length)setConnectionState_(v?'LIVE':'OFFLINE');return serverOnline}
+async function pingServer(){
+  const started=performance.now();
+  const r=await api({action:'ping'},12000,1);
+  if(!r.ok||!r.data||String(r.data.status||'').toUpperCase()!=='ONLINE')throw Error(r.message||'GAS/Spreadsheet tidak READY');
+  return {...r.data,clientRttMs:Math.round(performance.now()-started)};
+}
+async function health(){
+  setConnectionState_('VERIFYING','Menunggu verifikasi nyata dari Apps Script + Spreadsheet.');
+  try{
+    const d=await pingServer();
+    setConnectionState_('LIVE',`GAS ✓ • SHEET ✓ • RTT ${d.clientRttMs}ms`);
+    return d;
+  }catch(e){
+    // Timeout/transport error pertama hanya berarti verifikasi belum selesai.
+    // Jangan menyimpulkan server mati ketika Apps Script masih cold-starting.
+    setConnectionState_('CONNECTING',String(e&&e.message||e));
+    return false;
   }
-  let bars='';
-  hourly.forEach((x,i)=>{
-    const bx=padL+i*barsW,inH=scale(x.in||0),outH=scale(x.out||0);
-    bars+=`<rect x="${bx.toFixed(1)}" y="${(padT+chartH-inH).toFixed(1)}" width="${bw.toFixed(1)}" height="${inH.toFixed(1)}" fill="#16a34a"><title>${x.hour}:00 MASUK ${x.in||0}</title></rect>`;
-    bars+=`<rect x="${(bx+bw+2).toFixed(1)}" y="${(padT+chartH-outH).toFixed(1)}" width="${bw.toFixed(1)}" height="${outH.toFixed(1)}" fill="#dc2626"><title>${x.hour}:00 KELUAR ${x.out||0}</title></rect>`;
-    bars+=`<text x="${(bx+barsW/2).toFixed(1)}" y="${h-10}" font-size="9" text-anchor="middle" fill="#64748b">${x.hour}</text>`;
-  });
-  const title=opts.title?`<text x="${padL}" y="15" font-size="11" font-weight="700" fill="#1b538b">GRAFIK JAM MASUK/KELUAR • ${esc(opts.title)}</text>`:'';
-  const totalTxt=`<text x="${w-padR}" y="15" font-size="10" font-weight="700" text-anchor="end" fill="#0f172a">IN HARI INI: ${totalIn} • OUT HARI INI: ${totalOut}</text>`;
-  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-height:260px;background:#ffffff">${title}${totalTxt}${grid}<line x1="${padL}" y1="${(padT+chartH).toFixed(1)}" x2="${w-padR}" y2="${(padT+chartH).toFixed(1)}" stroke="#94a3b8"/>${bars}</svg><div style="font-size:11px;color:#64748b;margin-top:4px"><span style="color:#16a34a">■</span> Masuk &nbsp; <span style="color:#dc2626">■</span> Keluar &nbsp;&nbsp; <i>Sumbu X = JAM 0–23 (bukan tanggal)</i></div>`;
 }
 
 // Range-aware chart: 1 hari = per jam; lebih dari 1 hari = per tanggal.
@@ -284,8 +286,26 @@ function adminPin_(){
 }
 function accessToken_(){
  let t='';try{t=String(localStorage.getItem('vacsAccessToken')||'').trim()}catch(e){}
- if(!t){t=String(window.prompt('Masukkan ACCESS TOKEN VACS:','')||'').trim();if(t)try{localStorage.setItem('vacsAccessToken',t)}catch(e){}}
  return t;
+}
+let __vacsTokenModalPromise=null;
+function ensureAccessToken_(){
+ const existing=accessToken_();
+ if(existing)return Promise.resolve(existing);
+ if(__vacsTokenModalPromise)return __vacsTokenModalPromise;
+ __vacsTokenModalPromise=new Promise(resolve=>{
+   const box=document.createElement('div');box.id='vacsTokenModal';
+   box.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+   box.innerHTML=`<div style="width:100%;max-width:460px;background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.35)"><div style="font-size:20px;font-weight:900;margin-bottom:8px">🔐 VACS AUTHENTICATION</div><div style="color:#64748b;font-size:14px;line-height:1.5;margin-bottom:14px">ACCESS TOKEN hanya diperlukan untuk transaksi yang mengubah data server. Token disimpan lokal di perangkat ini dan tidak diminta ulang selama masih tersimpan.</div><label style="display:block;font-weight:800;margin-bottom:7px">ACCESS TOKEN VACS</label><input id="vacsTokenInput" type="password" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;padding:13px 14px;border:2px solid #cbd5e1;border-radius:12px;font-size:16px" placeholder="Masukkan token VACS"><div id="vacsTokenError" style="display:none;color:#b91c1c;font-weight:700;font-size:13px;margin-top:8px"></div><div style="display:flex;gap:10px;margin-top:16px"><button type="button" id="vacsTokenCancel" class="btn" style="flex:1">BATAL</button><button type="button" id="vacsTokenSave" class="btn green" style="flex:1">SIMPAN TOKEN</button></div></div>`;
+   document.body.appendChild(box);
+   const input=box.querySelector('#vacsTokenInput'),err=box.querySelector('#vacsTokenError');
+   const finish=v=>{try{box.remove()}catch(e){};__vacsTokenModalPromise=null;resolve(v||'')};
+   box.querySelector('#vacsTokenCancel').onclick=()=>finish('');
+   box.querySelector('#vacsTokenSave').onclick=()=>{const t=String(input.value||'').trim();if(!t){err.textContent='ACCESS TOKEN wajib diisi.';err.style.display='block';input.focus();return}try{localStorage.setItem('vacsAccessToken',t)}catch(e){}finish(t)};
+   input.addEventListener('keydown',e=>{if(e.key==='Enter')box.querySelector('#vacsTokenSave').click();if(e.key==='Escape')box.querySelector('#vacsTokenCancel').click()});
+   setTimeout(()=>input.focus(),50);
+ });
+ return __vacsTokenModalPromise;
 }
 async function backup(){const b=$('backupBtn');b.disabled=true;try{const r=await call({action:'backup',pin:adminPin_()},30000);if(!r.ok)throw Error(r.message);$('backupResult').textContent=`✓ Backup dibuat: ${r.data.name}`;$('backupResult').className='result show ok'}catch(e){$('backupResult').textContent='❌ '+e.message;$('backupResult').className='result show err'}finally{b.disabled=false}}
 function isoDateToLog(v){const s=String(v??'').trim();const m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);return m?String(m[3]).padStart(2,'0')+'/'+String(m[2]).padStart(2,'0')+'/'+m[1]:s}
@@ -334,6 +354,8 @@ function searchVehicle(){clearTimeout(searchDebounceT);searchDebounceT=setTimeou
 async function searchVehicleNow(){const queries=splitVehicleQueries($('search').value);const mySeq=++searchReqSeq;if(!queries.length){selectedVehicles=[];showVehicle(null);$('result').className='result';$('result').textContent='';return}const local=async()=>{const all=[];const seen=new Set();for(const q of queries){const d=await offlineMasterSearch(q);for(const v of(d.found||[])){const k=String(v.plate||'').trim().toUpperCase();if(k&&!seen.has(k)){seen.add(k);all.push(v)}}}if(mySeq===searchReqSeq)renderVehicleResults(all,queries);return all};try{const localItems=await local();if(localItems.length)return}catch(_){}try{const results=await Promise.all(queries.map(async q=>{const d=await call({action:'search',q},15000);if(d&&d.ok===false)throw Error(d.message||'Pencarian gagal');return{q,found:d.data?.found||[]}}));if(mySeq!==searchReqSeq)return;const items=[],seen=new Set();results.forEach(r=>r.found.forEach(v=>{const k=String(v.plate||'').trim().toUpperCase();if(k&&!seen.has(k)){seen.add(k);items.push(v)}}));if(items.length){online(true);renderVehicleResults(items,queries);return}}catch(e){}try{const localItems=await local();if(localItems.length)return}catch(_){}setResult('result','⚠️ SERVER BELUM TERJANGKAU. VACS akan mencoba jalur koneksi alternatif otomatis. Jika server belum dapat dijangkau, MASTER lokal tetap digunakan bila tersedia.','warn')}
 async function gateAccess(act){
   const list=selectedVehicles.slice();if(!list.length)return;
+  const token=await ensureAccessToken_();
+  if(!token){setResult('result','Transaksi dibatalkan — ACCESS TOKEN belum diisi.','warn');return;}
   const b1=$('inBtn'),b2=$('outBtn');b1.disabled=b2.disabled=true;
   const gateLabel=($('gateSelect').selectedOptions[0]?.textContent)||'GATE';
   const results=[];
@@ -346,7 +368,7 @@ async function gateAccess(act){
       const v=list[i];setResult('result',`⏳ ${act} ${i+1}/${list.length} • ${v.plate}`,'warn');
       const stateKey=String(v.plate||'').toUpperCase();if((act==='IN'&&state[stateKey]===true)||(act==='OUT'&&state[stateKey]===false)){results.push({plate:v.plate,eventId:'',status:'REJECTED',message:act==='IN'?'DITAHAN LOKAL — kendaraan masih tercatat DI DALAM.':'DITAHAN LOKAL — tidak ada IN aktif.'});continue;}
       state[stateKey]=(act==='IN');
-      const token=accessToken_();if(!token)throw Error('ACCESS TOKEN wajib diisi.');const payload={action:'access',plate:v.plate,activity:act,gateId:$('gateSelect').value,device:$('deviceId').value.trim()||device(),notes:$('gateNotes')?.value||'',localTimestamp:new Date().toISOString(),eventId:makeEventId(),accessToken:token};
+      const payload={action:'access',plate:v.plate,activity:act,gateId:$('gateSelect').value,device:$('deviceId').value.trim()||device(),notes:$('gateNotes')?.value||'',localTimestamp:new Date().toISOString(),eventId:makeEventId(),accessToken:token};
       try{await queueAdd({eventId:payload.eventId,kind:'gate',localTimestamp:payload.localTimestamp,payload});results.push({plate:v.plate,eventId:payload.eventId,status:'QUEUED',message:`${act} TERSIMPAN \u2022 MENUNGGU SYNC`})}
       catch(e){results.push({plate:v.plate,eventId:payload.eventId,status:'ERROR',message:'Gagal menyimpan transaksi lokal: '+(e.message||e)})}
     }
@@ -400,6 +422,7 @@ async function offlineMasterSearch(q){const a=await masterAll(),n=String(q||'').
 async function masterCount(){try{return(await masterAll()).length}catch(e){return 0}}
 function setMasterStatus(t,cls){const el=$('masterCacheStatus');if(!el)return;el.textContent=t;el.style.color=cls==='ok'?'#15803d':cls==='warn'?'#c56a08':'#dc2626'}
 async function syncMasterCache(){
+  setConnectionState_('SYNCING','MASTER sedang diverifikasi dan dimuat dari Spreadsheet.');
   let d;
   try{
     d=await call({action:'masterVehicles'},30000);
@@ -449,7 +472,7 @@ async function syncMasterCache(){
   setMasterStatus(`• LIVE • MASTER ${count} (rev ${revision.slice(0,10)}) SYNCED`,'ok');
   return count;
 }
-async function offlineAuth(act){const person=$('xPerson').value.trim(),plate=$('xPlate').value.trim(),gate=$('xGate').value;if(!person&&!plate)return setResult('offlineInfo','Person atau plate wajib.','err');const a=authCache.find(x=>(plate&&String(x.plate).replace(/\W/g,'').toUpperCase()===plate.replace(/\W/g,'').toUpperCase())||(person&&String(x.personName).toUpperCase()===person.toUpperCase()));if(!a||!authValid(a))return setResult('offlineInfo','🚫 OFFLINE DENIED — authorization tidak valid / expired / di luar jadwal.','err');if(a.gateAllowed&&a.gateAllowed!=='ALL'&&!String(a.gateAllowed).split(/[,|;]/).map(x=>x.trim().toUpperCase()).includes(gate.toUpperCase()))return setResult('offlineInfo','🚫 OFFLINE DENIED — gate tidak diizinkan.','err');const token=accessToken_();if(!token)return setResult('offlineInfo','ACCESS TOKEN wajib diisi.','err');const eventId=makeEventId(),item={eventId,kind:'auth',localTimestamp:new Date().toISOString(),payload:{personName:a.personName,plate:a.plate,type:a.type,company:a.company,purpose:a.purpose,host:a.host,gateId:gate,activity:act,device:$('xDevice').value||device(),accessToken:token}};await queueAdd(item);setResult('offlineInfo',`✓ ${act} QUEUED OFFLINE • ${eventId}`,'ok');try{await syncQueue()}catch(e){}}
+async function offlineAuth(act){const person=$('xPerson').value.trim(),plate=$('xPlate').value.trim(),gate=$('xGate').value;if(!person&&!plate)return setResult('offlineInfo','Person atau plate wajib.','err');const a=authCache.find(x=>(plate&&String(x.plate).replace(/\W/g,'').toUpperCase()===plate.replace(/\W/g,'').toUpperCase())||(person&&String(x.personName).toUpperCase()===person.toUpperCase()));if(!a||!authValid(a))return setResult('offlineInfo','🚫 OFFLINE DENIED — authorization tidak valid / expired / di luar jadwal.','err');if(a.gateAllowed&&a.gateAllowed!=='ALL'&&!String(a.gateAllowed).split(/[,|;]/).map(x=>x.trim().toUpperCase()).includes(gate.toUpperCase()))return setResult('offlineInfo','🚫 OFFLINE DENIED — gate tidak diizinkan.','err');const token=await ensureAccessToken_();if(!token)return setResult('offlineInfo','Transaksi dibatalkan — ACCESS TOKEN belum diisi.','warn');const eventId=makeEventId(),item={eventId,kind:'auth',localTimestamp:new Date().toISOString(),payload:{personName:a.personName,plate:a.plate,type:a.type,company:a.company,purpose:a.purpose,host:a.host,gateId:gate,activity:act,device:$('xDevice').value||device(),accessToken:token}};await queueAdd(item);setResult('offlineInfo',`✓ ${act} QUEUED OFFLINE • ${eventId}`,'ok');try{await syncQueue()}catch(e){}}
 function showConflict(item,msg){const plate=item?.payload?.plate||'kendaraan';const box=document.createElement('div');box.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';box.innerHTML=`<div style="max-width:520px;width:100%;background:#fff;border-radius:18px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><h2 style="margin:0 0 12px;color:#b91c1c">⚠️ TRANSAKSI TIDAK DIBUAT</h2><p style="font-weight:700;font-size:18px">Kendaraan ${esc(plate)} tidak diproses dari transaksi offline ini.</p><p>Server menolak transaksi karena kendaraan sudah memiliki transaksi yang lebih dahulu / status akses tidak memungkinkan.</p><p style="color:#64748b;font-size:13px">Detail server: ${esc(msg||'Transaksi ditolak')}</p><button class="btn blue" style="width:100%" onclick="this.closest('div[style*=fixed]').remove()">OK</button></div>`;document.body.appendChild(box)}
 let __vacsSyncInFlight=null;
 async function syncQueue(){
@@ -469,7 +492,7 @@ async function syncQueue(){
    batch.forEach(item=>{if(!returned.has(String(item.eventId)))allResults.push({eventId:item.eventId,status:'FAILED',message:'Server tidak mengembalikan hasil transaksi ini.',cleared:false})});
    allResults.push(...rs);return queueClear(clear);
   }
-  const token=accessToken_();if(!token)throw Error('ACCESS TOKEN wajib diisi sebelum sinkronisasi.');
+  const token=accessToken_();if(!token)return [];
   for(let i=0;i<items.length;i+=BATCH_SIZE){
    const batch=items.slice(i,i+BATCH_SIZE);
    try{
@@ -731,7 +754,7 @@ $('generateReport')?.addEventListener('click',report);$('rPeriodType')?.addEvent
 $('exportReport')?.addEventListener('click',exportReport);
 $('printReport')?.addEventListener('click',printReport);
 }
-try{initTypes();if($('dashDate'))$('dashDate').value=localISO();if($('ccFrom'))$('ccFrom').value=localISO();if($('ccTo'))$('ccTo').value=localISO();if($('aFrom'))$('aFrom').value=localISO();if($('aUntil'))$('aUntil').value=localISO();if($('deviceId'))$('deviceId').value=localStorage.getItem('vacsDeviceId')||device();bind();gdrBind();gdrRestore();if($('rPeriodType'))$('rPeriodType').value='daily';gdrRender();if($('gdrBar'))$('gdrBar').style.display='none';loadGates();}catch(e){console.error('VACS UI initialization failed:',e);toast('❌ UI gagal diinisialisasi: '+e.message)}
+try{initTypes();if($('dashDate'))$('dashDate').value=localISO();if($('ccFrom'))$('ccFrom').value=localISO();if($('ccTo'))$('ccTo').value=localISO();if($('aFrom'))$('aFrom').value=localISO();if($('aUntil'))$('aUntil').value=localISO();if($('deviceId'))$('deviceId').value=localStorage.getItem('vacsDeviceId')||device();bind();gdrBind();gdrRestore();if($('rPeriodType'))$('rPeriodType').value='daily';gdrRender();if($('gdrBar'))$('gdrBar').style.display='none';}catch(e){console.error('VACS UI initialization failed:',e);toast('❌ UI gagal diinisialisasi: '+e.message)}
 /* VACS FAST STARTUP / SWR
    Jangan tahan UI sampai master/auth/dashboard selesai. Tampilkan cache lokal dulu,
    lalu refresh server di background. Ini menghilangkan startup waterfall:
@@ -764,33 +787,44 @@ async function __vacsRecover(){
   }
 }
 (async()=>{
-  // FIRST PAINT: local cache only. Never wait for a network call before the gate is usable.
-  online(false);
+  // FIRST PAINT: local cache only. Network authority is resolved in a controlled order.
+  setConnectionState_('CONNECTING');
   try{
     const cached=await masterAll();
-    try{const raw=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');authCache=Array.isArray(raw)?raw:[];renderAuth()}catch(e){authCache=[];renderAuth()}
     if(cached.length){
       mergeAccessTypeOptions(cached.map(x=>x.accessType));
+      setConnectionState_('CONNECTING',`LOCAL MASTER ${cached.length} tersedia; verifikasi server berjalan.`);
       setMasterStatus(`• LOCAL CACHE ${cached.length} • MEMUAT SERVER...`,'warn');
     }else{
+      const raw=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');
+      authCache=Array.isArray(raw)?raw:[];
+      renderAuth();
       setMasterStatus('• LOCAL CACHE BELUM TERSEDIA • MEMUAT SERVER...','warn');
     }
   }catch(e){
     authCache=JSON.parse(localStorage.getItem('vacsAuthCache')||'[]');
     renderAuth();
   }
-  // Network hydration is deliberately background and parallel.
+
+  // CONNECTION GATE: verify GAS + Spreadsheet first, then verify/sync MASTER.
   setTimeout(async()=>{
-    // CONNECTION FIRST: one lightweight GAS→Spreadsheet probe, then MASTER.
-    // Do not fire several cold-start Apps Script executions at the same time.
     const live=await health();
     if(live){
-      await syncMasterCache().catch(e=>console.debug('[VACS] initial master refresh',e));
-      await Promise.allSettled([loadGates(),refreshAuth(),dash(),syncQueue()]);
+      await syncMasterCache();
+      await Promise.allSettled([
+        loadGates(),
+        refreshAuth(),
+        dash(),
+        syncQueue()
+      ]);
     }else{
-      await syncQueue().catch(e=>console.debug('[VACS] offline queue',e));
+      // First probe can be slow/cold. Keep the state honest without inventing OFFLINE.
+      const n=await masterCount();
+      if(n)setConnectionState_('OFFLINE_READY',`MASTER lokal ${n}; menunggu verifikasi server.`);
+      else setConnectionState_('CONNECTING','Menunggu respons Apps Script.');
     }
   },0);
+
   setTimeout(__vacsRecover,__vacsReconnectDelay);
 })();
 window.addEventListener('online',()=>{__vacsReconnectDelay=15000;__vacsRecover()});
