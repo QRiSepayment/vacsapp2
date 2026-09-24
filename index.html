@@ -131,7 +131,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbx5XAmEPM65ndKROiuEBfG5aX8MLgweFDg37Cas_qtlj4053QkyoN6Lto0r79J33UH56w/exec"
+  "https://script.google.com/macros/s/AKfycbxh-Iv7FJDYU39lI-hfwJ56Q9IyWrw_LHDg3NyU1MPnZjyhYPVww87QDgzk4Xb-YAM8Dw/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -430,7 +430,10 @@ async function gateAccess(act){
     pending.slice().sort((a,b)=>String(a.localTimestamp||'').localeCompare(String(b.localTimestamp||''))||Number(a.queuedAt||0)-Number(b.queuedAt||0)).forEach(x=>{const p=x.payload||{};const k=String(p.plate||'').toUpperCase();if(k&&p.activity)state[k]=String(p.activity).toUpperCase()==='IN'});
     for(let i=0;i<list.length;i++){
       const v=list[i];setResult('result',`⏳ ${act} ${i+1}/${list.length} • ${v.plate}`,'warn');
-      const stateKey=String(v.plate||'').toUpperCase();if((act==='IN'&&state[stateKey]===true)||(act==='OUT'&&state[stateKey]===false)){results.push({plate:v.plate,eventId:'',status:'REJECTED',message:act==='IN'?'DITAHAN LOKAL — kendaraan masih tercatat DI DALAM.':'DITAHAN LOKAL — tidak ada IN aktif.'});continue;}
+      const stateKey=String(v.plate||'').toUpperCase();
+      // SERVER IS THE AUTHORITATIVE STATE. Local vacsServerInside can be stale across days/devices,
+      // so NEVER reject an IN/OUT transaction solely from that cache. The backend canonicalOpenState_()
+      // decides whether the vehicle is actually inside. Local state is used only as an optimistic hint.
       state[stateKey]=(act==='IN');
       const payload={action:'access',plate:v.plate,activity:act,gateId:$('gateSelect').value,device:$('deviceId').value.trim()||device(),notes:$('gateNotes')?.value||'',localTimestamp:new Date().toISOString(),eventId:makeEventId(),accessToken:token};
       try{await queueAdd({eventId:payload.eventId,kind:'gate',localTimestamp:payload.localTimestamp,payload});results.push({plate:v.plate,eventId:payload.eventId,status:'QUEUED',message:`${act} TERSIMPAN \u2022 MENUNGGU SYNC`})}
