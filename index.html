@@ -185,6 +185,7 @@ async function api(p,timeout=12000,retries=1){
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
+async function call(p,timeout,retries){return api(p,timeout,retries)}
 let connectionState='OFFLINE';
 function setConnectionState_(state,detail){
   connectionState=state;
