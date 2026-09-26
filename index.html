@@ -131,7 +131,7 @@ function device(){
 }
 
 const GAS_API_ENDPOINTS=[
-  "https://script.google.com/macros/s/AKfycbzXv8J_pyuQ9P06ro8Iw683ZYY1Tj7Pan1CaFLNjB0bzWhW6VybAZwXYjg00n_MFh_H/exec"
+  "https://script.google.com/macros/s/AKfycbykO887IOtzLXCUmwRbHTAUZsMeR6fHxIVl3jE0mGMzCRqNazEm49rYItfQRuXlE0LW/exec"
 ],CREATED_BY="Mbah Pri",$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let activeApiBase='';
 try{activeApiBase=localStorage.getItem('vacsApiBase')||''}catch(e){}
@@ -185,7 +185,6 @@ async function api(p,timeout=12000,retries=1){
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
-async function call(p,timeout,retries){return api(p,timeout,retries)}
 let connectionState='OFFLINE';
 function setConnectionState_(state,detail){
   connectionState=state;
@@ -581,6 +580,7 @@ async function syncQueue(){
    try{
     const d=await call({action:'syncQueue',events:JSON.stringify(batch),accessToken:token},10000);
     if(d&&d.ok===false)throw Error(d.message||'Sync ditolak server');
+    online(true); // FIX 2026-09-26: respons sukses = bukti real-time server hidup, jangan nunggu heartbeat 30s berikutnya untuk update badge.
     await applyBatchResults(batch,Array.isArray(d.data?.results)?d.data.results:[]);
    }catch(e){
     // Unknown commit state: verify repeatedly, never blind retry the mutation.
