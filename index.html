@@ -185,6 +185,14 @@ async function api(p,timeout=12000,retries=1){
   }
   throw(lastErr||Error('Gagal menghubungi Apps Script'))
 }
+// FIX 2026-09-26: call() dipanggil di hampir semua fungsi (dash, search, current,
+// commandCenter, syncQueue, audit, dll) tapi TIDAK PERNAH didefinisikan di file ini —
+// ini bug yang sudah ada dari file asli, bukan dari patch sebelumnya. Akibatnya SETIAP
+// pemanggilan call(...) langsung throw "ReferenceError: call is not defined", membuat
+// seluruh aplikasi gagal bicara ke server sama sekali (makanya nyangkut di OFFLINE
+// terus-menerus, bukan soal sinyal). call() di sini adalah pembungkus tipis untuk
+// api() yang sudah ada dan sudah benar — sama persis parameter & bentuk hasilnya.
+async function call(p,timeout,retries){return api(p,timeout,retries)}
 let connectionState='OFFLINE';
 function setConnectionState_(state,detail){
   connectionState=state;
